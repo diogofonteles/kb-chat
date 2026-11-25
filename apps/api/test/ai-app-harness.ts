@@ -242,7 +242,9 @@ async function buildCore(config: AppConfig, logger: FastifyBaseLogger) {
   const opened = await vaultOf(config);
   const { vault } = opened;
   const index = await createSearchIndex({ config, vault, log: logger });
-  const catalog = new CatalogRegistry(vault);
+  const catalog = new CatalogRegistry(vault, (topic, id) =>
+    opened.removals.isRemoved(topic, id),
+  );
   await catalog.load();
   const ledger = new JsonlSpendLedger(
     join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),

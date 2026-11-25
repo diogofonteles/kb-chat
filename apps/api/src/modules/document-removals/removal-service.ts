@@ -18,8 +18,8 @@ export interface RemovalServiceDeps {
   readonly records: RemovalRecords;
   readonly catalog: CatalogRegistry;
   readonly levelOf: (topic: string, id: string) => string | null;
-  /** It left the collection: what sent it there leaves the list of what is being done. */
-  readonly left?: (topic: string, id: string) => Promise<void>;
+  /** Back, it has the level it had (ADR 0036 §5). */
+  readonly placeLevel?: (record: RemovalRecord) => Promise<void>;
   readonly now?: () => Date;
 }
 
@@ -50,24 +50,24 @@ export class RemovalService {
     documentId: string,
   ): Promise<DocumentRemoval> {
     const found = this.find(actor, topic, documentId);
+    const { topic: home, document } = found;
+    // Asked back before and not there yet: the Mac may be at it.
+    const before = this.deps.records.of(home, document.id);
     const record: RemovalRecord = {
-      id:
-        this.deps.records.of(found.topic, found.document.id)?.id ??
-        randomUUID(),
+      id: before?.id ?? randomUUID(),
       ...found,
-      level: this.deps.levelOf(found.topic, found.document.id),
+      level: this.deps.levelOf(home, document.id) ?? before?.level ?? null,
       by: { email: actor.email, name: actor.name },
       removedAt: this.now().toISOString(),
       wish: 'removed',
-      isQuarantined: false,
-      lease: null,
+      isQuarantined: before ? before.isQuarantined : false,
+      lease: before?.lease ?? null,
       attempts: 0,
       failed: false,
       detail: null,
     };
     await this.deps.records.put(record);
-    await this.deps.catalog.refresh(found.topic);
-    await this.deps.left?.(found.topic, found.document.id);
+    this.deps.catalog.hide(home);
     return this.toRemoval(record);
   }
 
@@ -107,9 +107,12 @@ export class RemovalService {
       detail: null,
     }));
     if (!asked) throw notFound();
-    // The Mac never took it: there is nothing to move back.
+    // No Mac was ever asked to take it: there is nothing to move back.
     const nothingToMove = !isPending(asked) && asked.lease === null;
-    if (nothingToMove) await this.deps.records.remove(id);
+    if (nothingToMove) {
+      await this.deps.placeLevel?.(asked);
+      await this.deps.records.remove(id);
+    }
     await this.deps.catalog.refresh(record.topic);
     return nothingToMove ? null : this.toRemoval(asked);
   }
@@ -141,6 +144,7 @@ export class RemovalService {
       ...{ id, topic, document, detail, removedAt },
       collection: this.deps.catalog.get(topic)?.topic.title ?? topic,
       state: stateOf(record),
+      asked: record.wish,
       by: by.name || by.email,
     };
   }
@@ -155,5 +159,5 @@ export class RemovalService {
 function stateOf(record: RemovalRecord): DocumentRemovalState {
   if (record.failed) return 'failed';
   if (record.wish === 'present') return 'restoring';
-  return record.isQuarantined ? 'removed' : 'removing';
+  return record.isQuarantined === true ? 'removed' : 'removing';
 }

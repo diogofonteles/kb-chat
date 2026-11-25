@@ -25,6 +25,8 @@ export const documentRemovalSchema = z.object({
   collection: z.string(),
   document: uploadedDocumentRefSchema,
   state: documentRemovalStateSchema,
+  /** What was asked last: out of the collection, or back in it. */
+  asked: z.enum(['removed', 'present']),
   /** The Mac's words, when it failed. */
   detail: z.string().nullable(),
   /** Who removed it. */

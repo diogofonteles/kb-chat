@@ -88,24 +88,53 @@ class FakeKb:
         spend = 0.0 if step == "index" else self.spend
         return KbRun(ok=True, output=self.outputs.get(step, f"{step} ok"), spend_usd=spend)
 
-    def _decided(self, topic: str, item: str) -> KbRun | None:
-        """An item a person's decision left in kb's own file (KBC-187)."""
+    def _rows(self, topic: str) -> list[dict]:
         queue = self.vault / topic / ".decisions" / "review.jsonl"
-        rows = queue.read_text(encoding="utf-8").splitlines() if queue.is_file() else []
-        for row in map(json.loads, rows):
+        lines = queue.read_text(encoding="utf-8").splitlines() if queue.is_file() else []
+        return [json.loads(line) for line in lines]
+
+    def _close(self, topic: str, item: str, status: str) -> None:
+        queue = self.vault / topic / ".decisions" / "review.jsonl"
+        rows = [
+            {**row, "status": status} if row["id"] == item else row for row in self._rows(topic)
+        ]
+        queue.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+    def _decided(self, topic: str, item: str) -> KbRun | None:
+        """An item a person's decision left in kb's own file (KBC-187), as kb 0.0.12 takes it."""
+        for row in self._rows(topic):
             if row["id"] != item:
                 continue
+            if row["status"] != "pending":
+                return KbRun(ok=False, output=f"review item {item} is already {row['status']}")
             inside = self.vault / topic / row["subject"]
             apart = self.vault / topic / row["subject"].replace("raw/", "raw/_quarantine/", 1)
-            source, target = (inside, apart) if row["queue"] == "remove" else (apart, inside)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            source.rename(target)
+            if row["queue"] == "remove":
+                apart.parent.mkdir(parents=True, exist_ok=True)
+                reason = row["action"]["reason"]
+                text = inside.read_text(encoding="utf-8")
+                marks = f"---\ntriage: quarantined\ntriage_reason: {reason}\n"
+                apart.write_text(text.replace("---\n", marks, 1), encoding="utf-8")
+                inside.unlink()
+            elif row["queue"] == "gate" and row["action"].get("quarantined"):
+                inside.parent.mkdir(parents=True, exist_ok=True)
+                apart.rename(inside)
+            else:
+                return KbRun(ok=False, output=f"unknown queue {row['queue']}")
+            self._close(topic, item, "accepted")
             return KbRun(ok=True, output="moved")
         return None
 
+    def reject(self, topic: str, item: str) -> KbRun:
+        self.calls.append(("reject", item, 0.0))
+        self._close(topic, item, "rejected")
+        return KbRun(ok=True, output="rejected")
+
     def refusals(self, topic: str) -> KbRun:
         """kb's queue, with the notes it prints after the JSON."""
-        refused = sorted((self.vault / topic / "raw" / "_quarantine").rglob("*.md"))
+        apart = sorted((self.vault / topic / "raw" / "_quarantine").rglob("*.md"))
+        # What a person took out waits for nobody: it is no item of the gate.
+        refused = [one for one in apart if "removed_by_person" not in one.read_text("utf-8")]
         items = [
             {
                 "id": f"rv-{one.stem}",

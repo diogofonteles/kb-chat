@@ -28,7 +28,7 @@ export class RemovedVault implements VaultReaderPort {
 
   async readDocument(topic: string, id: string): Promise<string | null> {
     // However the path is spelled, it is the same file.
-    return this.removals.isRemoved(topic, posix.normalize(id))
+    return this.removals.isRemovedIn(topic, posix.normalize(id))
       ? null
       : this.vault.readDocument(topic, id);
   }

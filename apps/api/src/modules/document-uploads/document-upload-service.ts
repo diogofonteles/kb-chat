@@ -261,12 +261,7 @@ export class DocumentUploadService {
     if (record.state === 'failed' || record.state === 'receiving') return false;
     // Taken off the list before it entered: it was cancelled.
     if (record.dismissed && !ENTERED.has(record.state)) return false;
-    // Removed from the collection, what it was made of may be sent again (KBC-187 BR-6).
-    if (
-      record.document &&
-      this.deps.isRemoved?.(record.topic, record.document.id)
-    )
-      return false;
+    if (this.hasLeft(record)) return false;
     if (!record.mediaId || !this.deps.mediaProgressOf) return true;
     return this.mediaOf(record)?.state !== 'failed';
   }
@@ -612,12 +607,25 @@ export class DocumentUploadService {
     return { items, work: { mac, busy, waiting } };
   }
 
+  /**
+   * What it became is out of the collection (KBC-187): it may be sent again (BR-6), and its row
+   * is back only if the document is. What kb keeps apart was never in it.
+   */
+  private hasLeft({ topic, document }: DocumentUploadRecord): boolean {
+    if (!document) return false;
+    return (
+      document.id.startsWith('raw/_quarantine/') ||
+      this.deps.isRemoved?.(topic, document.id) === true
+    );
+  }
+
   private visibleTo(actor: UploadActor): DocumentUploadRecord[] {
     return this.deps.records
       .all()
       .filter(
         (one) =>
           !one.dismissed &&
+          !this.hasLeft(one) &&
           (actor.isMaster || one.owner.principal === actor.principal) &&
           actor.canSee(one.topic),
       );
@@ -647,22 +655,6 @@ export class DocumentUploadService {
   /** The collection it was sent to; undefined for what was not sent from the app. */
   topicOf(id: string): string | undefined {
     return this.deps.records.get(id)?.topic;
-  }
-
-  /** It was taken out of the collection: what sent it there leaves the list. */
-  async documentLeft(topic: string, documentId: string): Promise<void> {
-    const sent = this.deps.records
-      .all()
-      .filter(
-        (one) =>
-          one.topic === topic &&
-          one.document?.id === documentId &&
-          !one.dismissed,
-      );
-    if (sent.length > 0)
-      await this.deps.records.put(
-        ...sent.map((one) => ({ ...one, dismissed: true })),
-      );
   }
 
   /** Everything a view is told of besides its own item, read once for a whole list. */

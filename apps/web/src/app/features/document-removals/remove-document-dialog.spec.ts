@@ -16,6 +16,7 @@ const REMOVAL: DocumentRemoval = {
   collection: 'Hermetismo',
   document: { id: 'raw/livro.md', title: 'O Livro' },
   state: 'removing',
+  asked: 'removed',
   detail: null,
   by: 'Dono',
   removedAt: '2026-11-25T12:00:00.000Z',
@@ -102,5 +103,37 @@ describe('RemoveDocumentDialog (KBC-187)', () => {
     ).toBeTruthy();
     press('Remover do acervo');
     http.expectOne(URL).flush(REMOVAL);
+  });
+
+  it('asked already it is not cancelled, and closed meanwhile it still tells', async () => {
+    const { http, fixture, removed } = await opened();
+    press('Remover do acervo');
+    await Promise.resolve();
+    TestBed.tick();
+    press('Cancelar');
+    const dialog = document.querySelector('dialog');
+    expect(dialog?.open).toBe(true);
+    dialog?.close();
+    http.expectOne(URL).flush(REMOVAL);
+    await fixture.whenStable();
+    expect(removed).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the focus on what was pressed when it fails', async () => {
+    const { http, fixture } = await opened();
+    const button = screen.getByRole('button', {
+      name: 'Remover do acervo',
+      hidden: true,
+    });
+    button.focus();
+    fireEvent.click(button);
+    http
+      .expectOne(URL)
+      .flush(
+        { error: { code: 'INTERNAL', message: 'x' } },
+        { status: 500, statusText: 'x' },
+      );
+    await fixture.whenStable();
+    expect(document.activeElement).toBe(button);
   });
 });

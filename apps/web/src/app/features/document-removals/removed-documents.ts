@@ -9,6 +9,7 @@ import {
   computed,
   effect,
   inject,
+  linkedSignal,
   signal,
   viewChild,
 } from '@angular/core';
@@ -16,6 +17,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   documentRemovalListSchema,
   type DocumentRemoval,
+  type DocumentRemovalList,
   type DocumentRemovalState,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
@@ -30,7 +32,7 @@ import { finalize, type Observable } from 'rxjs';
 const REFRESH_MS = 5_000;
 
 const STATES: Record<
-  DocumentRemovalState,
+  Exclude<DocumentRemovalState, 'failed'>,
   { readonly text: () => string; readonly tone: Tone }
 > = {
   removing: {
@@ -45,11 +47,21 @@ const STATES: Record<
     text: () => $localize`:@@removed.restoring:Voltando; espera o Mac`,
     tone: 'info',
   },
-  failed: {
-    text: () => $localize`:@@removed.failed:Falhou no Mac`,
+};
+
+/** What the Mac could not do: take it out (it is out of the app all the same), or bring it back. */
+const FAILED = {
+  removed: {
+    text: () =>
+      $localize`:@@removed.failedOut:Fora do app; o Mac não moveu o arquivo`,
     tone: 'err',
   },
-};
+  present: {
+    text: () =>
+      $localize`:@@removed.failedBack:O Mac não conseguiu trazer de volta`,
+    tone: 'err',
+  },
+} as const;
 
 /**
  * "Removidos do acervo" (KBC-187): what masters took out of the collections, by whom and when,
@@ -62,11 +74,11 @@ const STATES: Record<
     @if (problem(); as message) {
       <p class="error" role="alert">{{ message }}</p>
     }
-    @if (removals.error()) {
+    @if (removals.error() && !known()) {
       <p class="error" role="alert" i18n="@@removed.unread">
         Não consegui ler os removidos. Atualize a página.
       </p>
-    } @else if (!removals.hasValue()) {
+    } @else if (!known()) {
       <p class="muted" i18n="@@removed.loading">Carregando…</p>
     } @else {
       <p #lead class="muted" tabindex="-1">
@@ -104,19 +116,19 @@ const STATES: Record<
                   uiButton="outline"
                   size="sm"
                   type="button"
-                  [disabled]="busy()"
+                  [attr.aria-disabled]="busy()"
                   [attr.aria-label]="retryLabel(one)"
                   (click)="act(api.retry(one.id))"
                 >
                   <span i18n="@@removed.retry">Tentar de novo</span>
                 </button>
               }
-              @if (one.state === 'removed' || one.state === 'removing') {
+              @if (one.asked === 'removed') {
                 <button
                   uiButton="outline"
                   size="sm"
                   type="button"
-                  [disabled]="busy()"
+                  [attr.aria-disabled]="busy()"
                   [attr.aria-label]="restoreLabel(one)"
                   (click)="act(api.restore(one.id))"
                 >
@@ -141,15 +153,23 @@ export class RemovedDocuments {
   protected readonly removals = httpResource(documentRemovalsUrl, {
     parse: (body) => documentRemovalListSchema.parse(body),
   });
-  protected readonly items = computed(() =>
-    this.removals.hasValue() ? this.removals.value().items : [],
-  );
+  /** As last read: a reading that fails meanwhile takes nothing off the screen. */
+  protected readonly known = linkedSignal<
+    DocumentRemovalList | null,
+    DocumentRemovalList | null
+  >({
+    source: () => (this.removals.hasValue() ? this.removals.value() : null),
+    computation: (read, before) => read ?? before?.value ?? null,
+  });
+  protected readonly items = computed(() => this.known()?.items ?? []);
   protected readonly busy = signal(false);
   protected readonly problem = signal('');
 
   constructor() {
     // The Mac moves it in its own time: what waits for it is read again until it is done.
     effect((onCleanup) => {
+      // Read again after a reading that failed too.
+      this.removals.status();
       const waits = this.items().some(
         ({ state }) => state === 'removing' || state === 'restoring',
       );
@@ -160,7 +180,7 @@ export class RemovedDocuments {
   }
 
   protected stateOf(one: DocumentRemoval) {
-    return STATES[one.state];
+    return one.state === 'failed' ? FAILED[one.asked] : STATES[one.state];
   }
 
   protected when(one: DocumentRemoval): string {

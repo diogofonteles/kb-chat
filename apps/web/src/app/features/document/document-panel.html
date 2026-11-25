@@ -641,8 +641,8 @@
 @if (removing(); as doc) {
   <app-remove-document-dialog
     #removal
-    [topic]="topic()"
-    [documentId]="documentId()"
+    [topic]="doc.topic"
+    [documentId]="doc.id"
     [title]="doc.title"
     [collection]="collectionTitle() || topic()"
     (removed)="removed.emit()"

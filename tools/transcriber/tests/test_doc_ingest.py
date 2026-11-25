@@ -1,5 +1,6 @@
 """Documents and links sent from the app (KBC-149): a fake kb-map, kb and yt-dlp."""
 
+import json
 import shutil
 import subprocess
 import threading
@@ -802,7 +803,8 @@ def test_a_document_goes_out_of_the_collection_and_back(fake_api, vault):
     assert [body["spendUsd"] for body in fake_api.bodies("doc-result")] == [0, 0]
 
 
-def test_what_is_where_it_was_asked_to_be_does_not_move_again(fake_api, vault):
+def test_what_is_where_it_was_asked_to_be_is_only_indexed_again(fake_api, vault):
+    """The attempt that moved it may have ended before the index (I-5)."""
     inside = a_document(vault)
     kb = FakeKb(vault)
     fake_api.jobs[:] = [move_job("restore", "raw/articles/o-caibalion.md")]
@@ -812,7 +814,7 @@ def test_what_is_where_it_was_asked_to_be_does_not_move_again(fake_api, vault):
     worker(fake_api, vault, kb=kb).step()
     states = [body["outcome"]["state"] for body in fake_api.bodies("doc-result")]
     assert states == ["moved", "moved"]
-    assert kb.calls == []
+    assert [step for step, *_ in kb.calls] == ["index", "index"]
 
 
 def test_what_is_not_in_the_quarantine_any_more_cannot_come_back(fake_api, vault):
@@ -854,3 +856,102 @@ def test_a_move_kb_refuses_goes_back_to_the_queue(fake_api, vault, monkeypatch):
     (failed,) = fake_api.bodies("fail")
     assert "no such item" in failed["detail"]
     assert inside.is_file()
+
+
+def rows_of(vault: Path) -> list[dict]:
+    review = vault / "hermetismo" / ".decisions" / "review.jsonl"
+    return [json.loads(line) for line in review.read_text(encoding="utf-8").splitlines()]
+
+
+def test_a_move_kb_refuses_leaves_nothing_waiting_in_kbs_queue(fake_api, vault, monkeypatch):
+    a_document(vault)
+    kb = FakeKb(vault)
+    monkeypatch.setattr(kb, "accept", lambda *_: KbRun(ok=False, output="refs: file is locked"))
+    for _attempt in range(3):
+        fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+        worker(fake_api, vault, kb=kb).step()
+    assert {row["status"] for row in rows_of(vault)} == {"rejected"}
+
+
+def test_the_decision_a_crash_left_is_the_one_used(fake_api, vault):
+    a_document(vault)
+    decisions = vault / "hermetismo" / ".decisions"
+    decisions.mkdir()
+    row = {
+        "id": "rv-antes00001",
+        "queue": "remove",
+        "subject": "raw/articles/o-caibalion.md",
+        "evidence": "a person, in the app",
+        "action": {"reason": "removed_by_person"},
+        "status": "pending",
+    }
+    # Cut half-way, with no end of line: the next row is not glued to it.
+    (decisions / "review.jsonl").write_text(json.dumps(row), encoding="utf-8")
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    assert [call[1] for call in kb.calls if call[0] == "accept"] == ["rv-antes00001"]
+    fake_api.jobs[:] = [move_job("restore", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    assert [row["status"] for row in rows_of(vault)] == ["accepted", "accepted"]
+
+
+def test_a_row_is_never_glued_to_one_cut_half_way(fake_api, vault):
+    a_document(vault)
+    decisions = vault / "hermetismo" / ".decisions"
+    decisions.mkdir()
+    other = {"id": "rv-x", "queue": "gate", "subject": "raw/a.md", "status": "pending"}
+    (decisions / "review.jsonl").write_text(json.dumps(other), encoding="utf-8")
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    assert rows_of(vault)[0]["id"] == "rv-x"
+    assert len(rows_of(vault)) == 2
+
+
+def test_what_a_person_took_out_sent_again_comes_back(fake_api, vault):
+    """kb's index of duplicates has its quarantine: nothing new is written (B-2)."""
+    inside = a_document(vault)
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    apart = "raw/_quarantine/articles/o-caibalion.md"
+    fake_api.jobs[:] = [dict(URL_JOB)]
+    outcome = {"state": "duplicate", "document": apart, "usd": 0.001}
+    worker(fake_api, vault, FakeKbMap(vault, outcome), kb=kb).step()
+    result = fake_api.bodies("doc-result")[-1]
+    assert result["outcome"] == {
+        "state": "ready",
+        "document": {"id": "raw/articles/o-caibalion.md", "title": "O Caibalion"},
+        "review": False,
+    }
+    assert inside.is_file()
+
+
+def test_what_kb_had_refused_sent_again_waits_for_a_person(fake_api, vault):
+    refused_page(vault)
+    fake_api.jobs[:] = [dict(URL_JOB)]
+    outcome = {"state": "duplicate", "document": REFUSED}
+    worker(fake_api, vault, FakeKbMap(vault, outcome)).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["failure"] == "not-accepted"
+    assert result["outcome"]["refused"]["reason"] == "thin"
+
+
+def test_what_moved_goes_with_the_next_sync(fake_api, vault):
+    a_document(vault)
+    pending = []
+
+    class Sync:
+        def mark_pending(self):
+            pending.append(True)
+
+        def due(self):
+            return False
+
+    made = worker(fake_api, vault, kb=FakeKb(vault))
+    made.sync = Sync()
+    made._sync_if_due = lambda: None
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    made.step()
+    assert pending == [True]

@@ -1993,8 +1993,13 @@ function withCollections(
   return { ...given, vault, collections };
 }
 
-async function loadedCatalog(vault: VaultReaderPort): Promise<CatalogRegistry> {
-  const catalog = new CatalogRegistry(vault);
+async function loadedCatalog({
+  vault,
+  removals,
+}: AppDeps & { removals: RemovalRecords }): Promise<CatalogRegistry> {
+  const catalog = new CatalogRegistry(vault, (topic, id) =>
+    removals.isRemoved(topic, id),
+  );
   await catalog.load();
   return catalog;
 }
@@ -2059,7 +2064,7 @@ const accessAndWebSearch = async (deps: AppDeps) => ({
 /** Fills what the caller left out: in-memory stores, the agent and the providers. */
 async function completeDeps(given: AppDeps): Promise<FullDeps> {
   const deps = await withRemovals(withCollections(given));
-  const catalog = deps.catalog ?? (await loadedCatalog(deps.vault));
+  const catalog = deps.catalog ?? (await loadedCatalog(deps));
   const { authors, seeded } = await loadedAuthors(deps, catalog);
   const ledger = deps.ledger ?? new MemorySpendLedger();
   const agent = deps.agent ?? agentOf(deps, { catalog, ledger, authors });

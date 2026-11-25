@@ -21,13 +21,14 @@ import os
 import re
 import shutil
 import subprocess
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, TextIO
 
 # index before link gives link its vector neighbours; the last index makes link's keys
 # searchable (spike, item 7).
@@ -86,6 +87,10 @@ class KbPort(Protocol):
         """`kb review accept`: what was refused goes into the collection."""
         ...
 
+    def reject(self, topic: str, item: str) -> KbRun:
+        """`kb review reject`: the item is closed and nothing moves."""
+        ...
+
 
 class KbStepFailed(Exception):
     """A kb step exited with an error: the job fails with kb's output (AC-4) and what kb
@@ -131,6 +136,39 @@ def review_item_of(output: str, document: str) -> str | None:
         if item.get("subject") == document and (item.get("action") or {}).get("quarantined"):
             return str(item["id"])
     return None
+
+
+# kb holds its lock for a write at a time.
+LOCK_TRIES = 60
+LOCK_WAIT_S = 0.5
+BY_A_PERSON = "a person, in the app"
+# What kb writes on what a person took out (`triage_reason`).
+REMOVED = "removed_by_person"
+
+
+def locked_soon(lock: TextIO) -> None:
+    for _try in range(LOCK_TRIES):
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            time.sleep(LOCK_WAIT_S)
+    raise VaultBusy("kb is writing the collection's decisions")
+
+
+def pending_item_of(review: str, document: str, queue: str) -> str | None:
+    """The app's own item that waits for this document in kb's queue, if any."""
+    waiting = None
+    for line in review.splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict) or row.get("evidence") != BY_A_PERSON:
+            continue
+        if row.get("subject") == document and row.get("queue") == queue:
+            waiting = str(row["id"]) if row.get("status") == "pending" else None
+    return waiting
 
 
 def undecided_in(output: str) -> tuple[set[str], bool]:
@@ -183,6 +221,9 @@ class KbCli:
 
     def refusals(self, topic: str) -> KbRun:
         return self._run([self.binary, "review", topic, "--queue", "gate", "--format", "json"])
+
+    def reject(self, topic: str, item: str) -> KbRun:
+        return self._run([self.binary, "review", "reject", item, "--topic", topic, "--budget", "0"])
 
     def accept(self, topic: str, item: str) -> KbRun:
         """Local (kb 0.0.12): restoring a document asks no model."""
@@ -384,7 +425,7 @@ class KbPublisher:
     def quarantine(self, topic: str, document: str) -> None:
         """A document out of the collection (KBC-187): kb moves it to its quarantine, with what
         it needs to bring it back, by an item of its own review queue that says a person did."""
-        self._decide(topic, document, queue="remove", action={"reason": "removed_by_person"})
+        self._decide(topic, document, queue="remove", action={"reason": REMOVED})
 
     def restore(self, topic: str, document: str) -> None:
         """And back: by the item kb may have for it, or by one that says a person did."""
@@ -396,27 +437,45 @@ class KbPublisher:
         self._decide(topic, document, queue="gate", action=action)
 
     def _decide(self, topic: str, document: str, *, queue: str, action: dict) -> None:
-        item = f"rv-{uuid.uuid4().hex[:10]}"
-        row = {
-            "id": item,
-            "queue": queue,
-            "purpose": "manual",
-            "subject": document,
-            "question": "manual",
-            "probability": 1,
-            "receipt_key": "",
-            "evidence": "a person, in the app",
-            "action": action,
-            "status": "pending",
-            "created": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        }
+        item = self._item_for(topic, document, queue=queue, action=action)
+        done = self.kb.accept(topic, item)
+        if done.ok:
+            return
+        # Left pending, a bulk `kb review accept` would do later what nobody asks any more.
+        self.kb.reject(topic, item)
+        raise KbStepFailed("review accept", done.output)
+
+    def _item_for(self, topic: str, document: str, *, queue: str, action: dict) -> str:
+        """The person's decision in kb's own queue: the one a crash left there, or a new one."""
         folder = self.vault / topic / ".decisions"
         folder.mkdir(exist_ok=True)
-        with (folder / "review.jsonl").open("a", encoding="utf-8") as queue_file:
-            queue_file.write(json.dumps(row, ensure_ascii=False) + "\n")
-        done = self.kb.accept(topic, item)
-        if not done.ok:
-            raise KbStepFailed("review accept", done.output)
+        # kb's own lock on its state: it never rewrites the queue while this is added.
+        with open(folder / "state.jsonl.lock", "a+") as lock:
+            locked_soon(lock)
+            review = folder / "review.jsonl"
+            text = review.read_text(encoding="utf-8") if review.is_file() else ""
+            waiting = pending_item_of(text, document, queue)
+            if waiting:
+                return waiting
+            item = f"rv-{uuid.uuid4().hex[:10]}"
+            row = {
+                "id": item,
+                "queue": queue,
+                "purpose": "manual",
+                "subject": document,
+                "question": "manual",
+                "probability": 1,
+                "receipt_key": "",
+                "evidence": BY_A_PERSON,
+                "action": action,
+                "status": "pending",
+                "created": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+            # A file cut half-way has no end of line: the two rows would be lost as one.
+            gap = "" if text in ("", None) or text.endswith("\n") else "\n"
+            with review.open("a", encoding="utf-8") as rows:
+                rows.write(gap + json.dumps(row, ensure_ascii=False) + "\n")
+        return item
 
     def reindex(self, topic: str) -> None:
         """The search index as the collection is now: local, spends nothing."""

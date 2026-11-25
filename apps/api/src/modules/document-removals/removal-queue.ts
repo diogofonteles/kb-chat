@@ -26,7 +26,7 @@ export interface RemovalQueueDeps {
 const leaseLost = () =>
   new AppError('MEDIA_CONFLICT', 'This lease is no longer yours');
 
-/** Where the Mac left it is not where it was last asked to be. */
+/** Where the Mac left it is not where it was last asked to be, or nobody knows. */
 export const isPending = (record: RemovalRecord): boolean =>
   record.isQuarantined !== (record.wish === 'removed');
 
@@ -108,7 +108,9 @@ export class RemovalQueue {
         until: this.until(),
         wish: record.wish,
       };
-      this.later(this.deps.records.put({ ...record, attempts, lease }));
+      // From here on only the Mac knows where it is.
+      const asked = { attempts, lease, isQuarantined: null };
+      this.later(this.deps.records.put({ ...record, ...asked }));
       return jobOf(record, { leaseId: lease.leaseId, attempt: attempts + 1 });
     }
     return null;
@@ -147,20 +149,26 @@ export class RemovalQueue {
       await this.refuse(record, outcome.detail);
       return;
     }
+    if (outcome.state !== 'moved')
+      throw new AppError('VALIDATION_FAILED', 'Not an outcome of a removal');
     const isQuarantined = record.lease?.wish === 'removed';
-    const ended = !isQuarantined && record.wish === 'present';
-    if (ended) {
-      await this.deps.placeLevel?.(record);
-      await this.deps.records.remove(record.id);
-    } else
-      await this.deps.records.update(record.id, (current) => ({
-        ...current,
-        isQuarantined,
-        lease: null,
-        attempts: 0,
-        detail: null,
-      }));
+    if (!isQuarantined) await this.deps.placeLevel?.(record);
+    await this.leave(owner, isQuarantined);
     this.deps.moved?.(record.topic);
+  }
+
+  /** It ends where it was asked to be; asked otherwise while this was told, it goes on. */
+  private async leave(
+    owner: LeaseOwner,
+    isQuarantined: boolean,
+  ): Promise<void> {
+    const now = this.held(owner);
+    if (!isQuarantined && now.wish === 'present') {
+      await this.deps.records.remove(now.id);
+      return;
+    }
+    const told = { isQuarantined, lease: null, attempts: 0, detail: null };
+    await this.deps.records.put({ ...now, ...told });
   }
 
   /** The Mac cannot do it as it is: said, until a person asks again. */

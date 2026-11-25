@@ -15,7 +15,7 @@ const recordSchema = z.object({
   by: z.object({ email: z.string(), name: z.string() }),
   removedAt: z.string(),
   wish: wishSchema,
-  isQuarantined: z.boolean(),
+  isQuarantined: z.boolean().nullable(),
   lease: z
     .object({
       leaseId: z.string(),

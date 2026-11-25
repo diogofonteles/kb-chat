@@ -188,7 +188,9 @@ const index = await createSearchIndex({ config, vault, log: logger });
 const ledger = new JsonlSpendLedger(
   join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
 );
-const catalog = new CatalogRegistry(vault);
+const catalog = new CatalogRegistry(vault, (topic, id) =>
+  removals.isRemoved(topic, id),
+);
 await catalog.load();
 // The authors of each collection (KBC-049, ADR 0030), in the state dir like the registry.
 const authorDirectory = new AuthorDirectory(

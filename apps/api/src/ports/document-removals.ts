@@ -22,8 +22,11 @@ export interface RemovalRecord {
   readonly removedAt: string;
   /** What was asked last; the app hides it while it is `removed`. */
   readonly wish: RemovalWish;
-  /** Where the Mac left it: in kb's quarantine, or still in the collection. */
-  readonly isQuarantined: boolean;
+  /**
+   * Where the Mac left it: in kb's quarantine, or still in the collection. Null from the moment
+   * a Mac is asked until it says: it may have moved it and not told.
+   */
+  readonly isQuarantined: boolean | null;
   readonly lease: RemovalLease | null;
   readonly attempts: number;
   /** The Mac gave up: a person asks again. */

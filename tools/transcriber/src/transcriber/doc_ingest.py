@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlsplit
 
-from .kb_publish import KbPublisher, KbStepFailed
+from .kb_publish import REMOVED, KbPublisher, KbStepFailed
 from .known_links import is_short, known_address
 from .recording_file import NotARecording, TooLarge, fetch_file, led_to
 
@@ -478,6 +478,8 @@ class DocIngester:
         if state not in ("converted", "review", "duplicate") or not outcome.get("document"):
             raise failure_of(outcome, self.publisher.vault, topic)
         document = str(outcome["document"])
+        if QUARANTINED.match(document):
+            return self._again(job, document, usd_of(outcome))
         title = title_of(self.publisher.vault, topic, document)
         # What this same upload wrote before a crash is not "already there": its steps go on.
         repeated = state == "duplicate" and not outcome.get("own")
@@ -488,6 +490,21 @@ class DocIngester:
             usd_of(outcome),
             review=state == "review",
         )
+
+    def _again(self, job: dict, apart: str, usd: float) -> Converted:
+        """kb counts what it keeps apart as the same text (its quarantine is in its index of
+        duplicates): what a person took out comes back, what kb refused waits for a person."""
+        topic = job["topic"]
+        vault = self.publisher.vault
+        refused = refused_in(vault, topic, {"document": apart})
+        if refused is None or refused["reason"] != REMOVED:
+            detail = "kb had refused the same text before"
+            raise DocIngestFailed("not-accepted", detail, usd, refused)
+        document = apart.replace(QUARANTINE, "raw/", 1)
+        self.publisher.restore(topic, document)
+        if not (vault / topic / document).is_file():
+            raise KbStepFailed("review accept", f"{document} was not restored", usd)
+        return Converted("converted", document, title_of(vault, topic, document), usd)
 
     def accept(self, job: dict) -> Converted:
         """A person said it enters all the same: kb takes it out of its quarantine. Done before
@@ -514,17 +531,21 @@ class DocIngester:
         out = job["source"]["kind"] == "remove"
         folder = self.publisher.vault / topic
         inside = folder / document
-        if inside.is_file() != out:
-            return
+        if inside.is_file() == out:
+            self._moved(topic, document, out=out)
+        # Also where it already is: the attempt that moved it may have ended before the index.
+        self.publisher.reindex(topic)
+
+    def _moved(self, topic: str, document: str, *, out: bool) -> None:
+        folder = self.publisher.vault / topic
         if out:
             self.publisher.quarantine(topic, document)
         else:
             if not (folder / document.replace("raw/", QUARANTINE, 1)).is_file():
                 raise DocIngestFailed("conversion-failed", "it is not in kb's quarantine any more")
             self.publisher.restore(topic, document)
-        if inside.is_file() == out:
+        if (folder / document).is_file() == out:
             raise KbStepFailed("review accept", f"{document} was not moved")
-        self.publisher.reindex(topic)
 
     def finish(self, job: dict, converted: Converted, say) -> float:
         """kb's steps and the map, for a new document; what the whole job spent."""

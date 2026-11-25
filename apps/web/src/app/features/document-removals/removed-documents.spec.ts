@@ -17,6 +17,7 @@ const removal = (fields: Partial<DocumentRemoval> = {}): DocumentRemoval => ({
   collection: 'Hermetismo',
   document: { id: 'raw/livro.md', title: 'O Livro' },
   state: 'removed',
+  asked: 'removed',
   detail: null,
   by: 'Dono',
   removedAt: '2026-11-25T12:00:00.000Z',
@@ -50,11 +51,13 @@ describe('RemovedDocuments (KBC-187)', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'Trazer de volta O Livro' }),
     );
-    http
-      .expectOne({ method: 'POST', url: `${URL}/${ID}/restore` })
-      .flush({ removal: removal({ state: 'restoring' }) });
+    http.expectOne({ method: 'POST', url: `${URL}/${ID}/restore` }).flush({
+      removal: removal({ state: 'restoring', asked: 'present' }),
+    });
     TestBed.tick();
-    http.expectOne(URL).flush({ items: [removal({ state: 'restoring' })] });
+    http
+      .expectOne(URL)
+      .flush({ items: [removal({ state: 'restoring', asked: 'present' })] });
     await fixture.whenStable();
     expect(screen.getByText('Voltando; espera o Mac')).toBeTruthy();
     expect(
@@ -76,8 +79,46 @@ describe('RemovedDocuments (KBC-187)', () => {
     expect(screen.getByText('Fora; o Mac ainda move o arquivo')).toBeTruthy();
     expect(screen.getByText('kb review: no')).toBeTruthy();
     expect(
-      screen.getByRole('button', { name: 'Tentar de novo Outro' }),
+      screen.getByText('Fora do app; o Mac não moveu o arquivo'),
     ).toBeTruthy();
+    // It failed on the way out: it may be asked again, or given up.
+    for (const name of ['Tentar de novo Outro', 'Trazer de volta Outro'])
+      expect(screen.getByRole('button', { name })).toBeTruthy();
+  });
+
+  it('what failed on the way back is only asked again', async () => {
+    await shown([
+      removal({ state: 'failed', asked: 'present', detail: 'kb: no' }),
+    ]);
+    expect(
+      screen.getByText('O Mac não conseguiu trazer de volta'),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Trazer de volta O Livro' }),
+    ).toBeNull();
+  });
+
+  it('a press on the way keeps the focus, and a reading that fails keeps the list', async () => {
+    const { http, fixture } = await shown([removal()]);
+    const button = screen.getByRole('button', {
+      name: 'Trazer de volta O Livro',
+    });
+    button.focus();
+    fireEvent.click(button);
+    TestBed.tick();
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+    fireEvent.click(button);
+    http
+      .expectOne(`${URL}/${ID}/restore`)
+      .flush(
+        { error: { code: 'NOT_FOUND', message: 'x' } },
+        { status: 500, statusText: 'x' },
+      );
+    expect(document.activeElement).toBe(button);
+    TestBed.tick();
+    http.expectOne(URL).flush('x', { status: 503, statusText: 'x' });
+    await fixture.whenStable();
+    expect(screen.getByText('O Livro')).toBeTruthy();
   });
 
   it('says when it could not be done, and reads the list again', async () => {

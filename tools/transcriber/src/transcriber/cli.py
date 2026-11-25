@@ -111,7 +111,7 @@ def run(args: argparse.Namespace) -> int:
         return 2
     vault = os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
     from .kb_balance import KbBalance
-    from .kb_keys import REQUIRED_KEY, kb_env, kb_problems
+    from .kb_keys import kb_env, kb_problems
 
     # KBC-117: the kb's AI keys from the Keychain, for kb's own environment only.
     env = {} if args.no_kb_publish else kb_env(keys_of())
@@ -122,7 +122,7 @@ def run(args: argparse.Namespace) -> int:
     kb = publisher.kb if publisher else None
     status = status_of(publisher)
     if publisher:
-        status.kb_balance = KbBalance({**os.environ, **env}.get(REQUIRED_KEY)).read
+        status.kb_balance = KbBalance(lambda: key_of(publisher)).last
     reporter = StatusReporter(api)
     announce_preparing(status, reporter)
     model, count = _mlx()
@@ -164,6 +164,13 @@ PREPARING = (
     "preparando o transcritor: carregando os modelos e os componentes de separar vozes "
     "e de perfis de voz (na primeira vez, o uv os instala sozinho)"
 )
+
+
+def key_of(publisher) -> str | None:
+    """The key kb runs with now (it may have been stored since this started)."""
+    from .kb_keys import REQUIRED_KEY
+
+    return {**os.environ, **getattr(publisher.kb, "env", {})}.get(REQUIRED_KEY)
 
 
 def status_of(publisher):

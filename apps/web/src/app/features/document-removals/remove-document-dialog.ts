@@ -32,6 +32,7 @@ import { finalize, type Observable } from 'rxjs';
       [width]="480"
       [lift]="52"
       [confirm]="true"
+      [closeOnBackdrop]="!busy()"
       (closed)="left()"
     >
       @if (removalId()) {
@@ -63,7 +64,7 @@ import { finalize, type Observable } from 'rxjs';
           <button
             uiButton="ghost"
             type="button"
-            [disabled]="busy()"
+            [attr.aria-disabled]="busy()"
             (click)="bringBack(id)"
           >
             <span i18n="@@removal.restore">Trazer de volta</span>
@@ -72,16 +73,25 @@ import { finalize, type Observable } from 'rxjs';
             <span i18n="@@removal.close">Concluir</span>
           </button>
         } @else {
-          <button uiButton="ghost" type="button" (click)="close()">
+          <button
+            uiButton="ghost"
+            type="button"
+            [attr.aria-disabled]="busy()"
+            (click)="cancel()"
+          >
             <span i18n="@@removal.cancel">Cancelar</span>
           </button>
           <button
             uiButton="danger"
             type="button"
-            [disabled]="busy()"
+            [attr.aria-disabled]="busy()"
             (click)="remove()"
           >
-            <span i18n="@@removal.confirm">Remover do acervo</span>
+            @if (busy()) {
+              <span i18n="@@removal.removing">Removendo…</span>
+            } @else {
+              <span i18n="@@removal.confirm">Remover do acervo</span>
+            }
           </button>
         }
       </div>
@@ -139,6 +149,11 @@ export class RemoveDocumentDialog {
     this.dialog().close();
   }
 
+  /** Asked already, it is not cancelled any more: it is waited for. */
+  protected cancel(): void {
+    if (!this.busy()) this.close();
+  }
+
   protected left(): void {
     if (this.removalId() !== null) this.removed.emit();
   }
@@ -146,6 +161,11 @@ export class RemoveDocumentDialog {
   protected remove(): void {
     this.act(this.api.remove(this.topic(), this.documentId()), ({ id }) => {
       this.removalId.set(id);
+      // Closed meanwhile (Escape, the cross): it left all the same, and who opened it is told.
+      if (!this.dialog().isOpen) {
+        this.removed.emit();
+        return;
+      }
       afterNextRender(() => this.done()?.nativeElement.focus(), {
         injector: this.injector,
       });

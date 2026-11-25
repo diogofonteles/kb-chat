@@ -138,7 +138,6 @@ class WorkerStatus:
 
     def snapshot(self) -> dict:
         """The body of POST /api/v1/media-worker/status."""
-        # It may ask the network: never with the lock held.
         balance = self.kb_balance() if self.kb_balance else None
         with self._lock:
             current = None

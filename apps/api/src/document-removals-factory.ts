@@ -18,6 +18,7 @@ import type {
   DocumentUploadService,
 } from './modules/document-uploads/index.js';
 import { uploadActorOf } from './document-uploads-factory.js';
+import type { RemovalRecord } from './ports/document-removals.js';
 import { refreshSoon } from './refresh-soon.js';
 
 /** What taking a document out of its collection is built from (KBC-187). */
@@ -45,7 +46,7 @@ export async function registerDocumentRemovals(
     catalog,
     levelOf: (topic, id) =>
       wiring.levels.directory.placementsOf(topic)[id]?.level ?? null,
-    left: (topic, id) => uploads.documentLeft(topic, id),
+    placeLevel: (record) => placeLevel(app, wiring, record),
   });
   await app.register(
     documentRemovalRoutes({
@@ -58,8 +59,9 @@ export async function registerDocumentRemovals(
     removals: removalQueue(app, wiring),
     entered: async (jobId, documentId) => {
       const topic = uploads.topicOf(jobId);
-      const removed = topic && records.of(topic, documentId);
-      if (removed) await records.remove(removed.id);
+      const removed = topic ? records.of(topic, documentId) : undefined;
+      // One asked for while it was entering stands: what came back is what the Mac had taken.
+      if (removed?.isQuarantined) await records.remove(removed.id);
     },
   });
   wiring.onDocIngest?.(jobs);
@@ -92,12 +94,18 @@ const removalQueue = (
       onError: (err) =>
         app.log.warn({ err }, 'document removals: a collection was not read'),
     }),
-    placeLevel: async ({ topic, document, level, by }) => {
-      if (level === null) return;
-      await levels.documents.placeArriving(
-        { actor: { by: by.email }, log: app.log },
-        { topic, id: document.id, level },
-      );
-    },
+    placeLevel: (record) => placeLevel(app, { levels }, record),
     onError: (err, message) => app.log.error({ err }, message),
   });
+
+async function placeLevel(
+  app: FastifyInstance,
+  { levels }: Pick<DocumentRemovalsWiring, 'levels'>,
+  { topic, document, level, by }: RemovalRecord,
+): Promise<void> {
+  if (level === null) return;
+  await levels.documents.placeArriving(
+    { actor: { by: by.email }, log: app.log },
+    { topic, id: document.id, level },
+  );
+}

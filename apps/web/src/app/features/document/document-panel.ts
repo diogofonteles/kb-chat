@@ -221,10 +221,19 @@ export class DocumentPanel {
   protected readonly subject = computed(() => !!this.loaded()?.concept);
   /** Masters, and what was put in the collection: kb's own pages come from the documents. */
   protected readonly canRemove = computed(
-    () => this.session.isMaster() && !this.subject() && !this.inSource(),
+    () =>
+      this.session.isMaster() &&
+      // Where the Mac that moves it is (the routes are there with the media library).
+      this.session.me()?.media === true &&
+      !this.subject() &&
+      !this.inSource(),
   );
   /** The document whose removal is asked: the dialog is there once it is. */
-  protected readonly removing = signal<KbDocument | null>(null);
+  protected readonly removing = signal<{
+    readonly topic: string;
+    readonly id: string;
+    readonly title: string;
+  } | null>(null);
   protected readonly facets = computed(() => {
     const doc = this.loaded();
     return doc ? describeFacets(doc) : '';
@@ -432,7 +441,9 @@ export class DocumentPanel {
 
   /** ⋯ "Sobre este documento": where the text ends, its authorship, subjects and copies. */
   protected askRemoval(doc: KbDocument): void {
-    this.removing.set(doc);
+    // What is named is what leaves, whatever the panel reads by then.
+    const [topic, id] = [this.topic(), this.documentId()];
+    this.removing.set({ topic, id, title: doc.title });
     afterNextRender(() => this.removal()?.open(), { injector: this.injector });
   }
 

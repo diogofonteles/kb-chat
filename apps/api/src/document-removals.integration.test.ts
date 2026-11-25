@@ -239,28 +239,124 @@ describe('Removing a document from its collection in the app (KBC-187)', () => {
     );
   });
 
-  it('what it was made of may be sent again, and under its old id it is seen (BR-6)', async () => {
+  it('what it was made of may be sent again: it comes back, and its removal ends (BR-6)', async () => {
     const made = await withDocument();
     const { media, mac, ana, vault } = made;
     await removed(made);
-    await moved(made, await leaseDoc(media, mac.token));
-    const again = await announce(ana.call);
-    expect(again.json()).toMatchObject({ outcome: 'created' });
-    const upload = await sentFile(media, ana);
     const job = await leaseDoc(media, mac.token);
-    expect(job.id).toBe(upload.id);
+    await moved(made, job);
+    const upload = await sentFile(media, ana);
+    const again = await leaseDoc(media, mac.token);
+    expect(again.id).toBe(upload.id);
+    // As the Mac does it: kb tells the same text in its quarantine, and it is restored.
+    await rename(
+      join(vault, 'hermetismo', ID.replace('raw/', 'raw/_quarantine/')),
+      join(vault, 'hermetismo', ID),
+    );
+    await docResult(media, {
+      token: mac.token,
+      job: again,
+      outcome: { state: 'ready', document: { id: ID, title: 'O Caibalion' } },
+    });
+    await media.started.catalog.refresh('hermetismo');
+    expect(await listed(made)).toEqual([]);
+    expect(await reach(media, ana.call)).toMatchObject({ read: 200 });
+  });
+
+  it('a Mac from before, that calls it a repeat, leaves nothing that cannot be sent (BR-6)', async () => {
+    const made = await withDocument();
+    const { media, mac, ana } = made;
+    await removed(made);
+    await moved(made, await leaseDoc(media, mac.token));
+    await sentFile(media, ana);
+    const job = await leaseDoc(media, mac.token);
+    await docResult(media, {
+      token: mac.token,
+      job,
+      outcome: {
+        state: 'duplicate',
+        document: {
+          id: ID.replace('raw/', 'raw/_quarantine/'),
+          title: 'O Caibalion',
+        },
+      },
+    });
+    expect(await uploadsOf(ana.call)).toEqual([]);
+    expect((await announce(ana.call)).json()).toMatchObject({
+      outcome: 'created',
+    });
+  });
+
+  it('one asked for while the document was entering stands (I-3)', async () => {
+    const made = await world();
+    const { vault, media, ana, master } = made;
+    await sentFile(media, ana);
+    const mac = await docMac(media);
+    const job = await leaseDoc(media, mac.token);
+    await writeConverted(media, { vault, id: ID, title: 'O Caibalion' });
+    const asked = await master('POST', `${url()}/removal`);
+    expect(asked.statusCode).toBe(200);
     await docResult(media, {
       token: mac.token,
       job,
       outcome: { state: 'ready', document: { id: ID, title: 'O Caibalion' } },
     });
-    await writeConverted(media, {
-      vault,
+    expect(await listed(made)).toMatchObject([{ state: 'removing' }]);
+    expect(await reach(media, master)).toMatchObject({ read: 404 });
+  });
+
+  it('its row is back on the list only with it', async () => {
+    const made = await withDocument();
+    const { ana, master } = made;
+    expect(await uploadsOf(ana.call)).toHaveLength(1);
+    const { id } = await removed(made);
+    expect(await uploadsOf(ana.call)).toEqual([]);
+    await master('POST', `${REMOVALS}/${id}/restore`);
+    expect(await uploadsOf(ana.call)).toMatchObject([{ state: 'ready' }]);
+  });
+
+  it('an old answer that cites it keeps its prose, and its source is closed to all (BR-5)', async () => {
+    const made = await withDocument();
+    const { master } = made;
+    const id = '9b2e6d2f-4a3b-4d6c-9e7f-8091a2b3c4d5';
+    const source = {
+      n: 1,
       id: ID,
       title: 'O Caibalion',
-      sha256: PDF_SHA,
+      authorship: 'outros-autores',
+    };
+    const at = '2026-11-25T12:00:00.000Z';
+    const saved = {
+      kind: 'research',
+      id,
+      topic: 'hermetismo',
+      title: 'o todo',
+      createdAt: at,
+      updatedAt: at,
+      turns: [
+        {
+          ...{ id: '8a1e6d2f-4a3b-4d6c-9e7f-8091a2b3c4d5', at },
+          ...{ question: 'o todo?', answer: 'O todo é mente [1].' },
+          ...{ sources: [source], steps: 1, usd: 0, interrupted: false },
+          ...{ billing: 'subscription', model: 'stub/model' },
+        },
+      ],
+    };
+    const at1 = `/api/v1/conversations/${id}`;
+    const put = await master('PUT', at1, saved);
+    expect(put.statusCode, put.body).toBe(200);
+    const turnNow = async () =>
+      (await master('GET', at1)).json<{
+        turns: { answer: string; sources: object[] }[];
+      }>().turns[0];
+    expect((await turnNow())?.sources[0]).toMatchObject({ id: ID });
+    const { id: removal } = await removed(made);
+    expect(await turnNow()).toMatchObject({
+      answer: 'O todo é mente [1].',
+      sources: [{ n: 1, restricted: true }],
     });
-    expect(await listed(made)).toEqual([]);
-    expect(await reach(media, ana.call)).toMatchObject({ read: 200 });
+    // Back in the collection, it is its source again: nothing stored was lost.
+    await master('POST', `${REMOVALS}/${removal}/restore`);
+    expect((await turnNow())?.sources[0]).toMatchObject({ id: ID });
   });
 });
