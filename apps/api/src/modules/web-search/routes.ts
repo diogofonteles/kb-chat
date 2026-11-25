@@ -14,7 +14,12 @@ import type {
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError } from '../../app-error.js';
-import { principalOf, type RouteAccess } from '../auth/index.js';
+import {
+  isMaster,
+  principalOf,
+  viewerOf,
+  type RouteAccess,
+} from '../auth/index.js';
 import type { AlreadyOf, WebSearchService } from './web-search-service.js';
 
 /** Who may send documents searches the web for them (KBC-009 R4: the same permission). */
@@ -76,7 +81,14 @@ function registerSearch(app: FastifyInstance, deps: WebSearchRouteDeps): void {
       const { topic } = request.params;
       if (!deps.hasTopic(topic))
         throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
-      return deps.service.search(request.body, deps.alreadyOf(request, topic));
+      const found = await deps.service.search(
+        request.body,
+        deps.alreadyOf(request, topic),
+      );
+      // The balance is the masters' to see.
+      return isMaster(viewerOf(request).person)
+        ? found
+        : { ...found, creditsRemaining: null };
     },
   );
 }

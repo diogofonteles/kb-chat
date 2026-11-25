@@ -2,7 +2,6 @@ import {
   WEB_SEARCH_LOW_CREDITS,
   type WebSearchAvailability,
   type WebSearchCredits,
-  type WebSearchKind,
   type WebSearchRequest,
   type WebSearchResponse,
   type WebSearchResult,
@@ -18,8 +17,8 @@ import type {
   WebSearchFailure,
   WebSearchPort,
 } from '../../ports/web-search.js';
-import { candidatesOf } from './candidates.js';
-import { VIDEO_DOMAINS } from './video-page.js';
+import { candidatesOf, interleave, type Candidate } from './candidates.js';
+import { groupLimit, groupsOf, type SearchGroup } from './search-plan.js';
 import {
   DEFAULT_WEB_SEARCH_CONFIG,
   webSearchConfigSchema,
@@ -31,6 +30,9 @@ const KEY_CONTEXT = 'web-search:firecrawl-key';
 /** A master's screen reads the balance again after this long; the others, in the background. */
 export const SETTINGS_TTL_MS = 30_000;
 export const AVAILABLE_TTL_MS = 10 * 60_000;
+
+/** Firecrawl searches of one request at once. */
+export const SEARCHES_AT_ONCE = 3;
 
 /** Whether the collection already has a link, for the person asking. */
 export type AlreadyOf = (url: string) => WebSearchResult['already'];
@@ -59,17 +61,25 @@ const UNKNOWN: Known = {
   askedAt: Number.NEGATIVE_INFINITY,
 };
 
-interface KindAnswer {
-  readonly kind: WebSearchKind;
-  readonly answer: WebSearchAnswer;
+/** A search of the request and its answer; null when it was not made. */
+interface GroupAnswer {
+  readonly group: SearchGroup;
+  readonly answer: WebSearchAnswer | null;
 }
+
+/** What asking again, now, would only be told again. */
+const STOPS = new Set<WebSearchAnswer['kind']>([
+  'key-rejected',
+  'no-credits',
+  'rate-limited',
+]);
 
 const notConnected = () =>
   new AppError('WEB_SEARCH_NOT_CONNECTED', 'The web search has no usable key');
 const unavailable = () =>
   new AppError('WEB_SEARCH_UNAVAILABLE', 'The web search did not answer');
 
-/** What a search that found nothing at all says, the gravest failure first. */
+/** What a search that found nothing says, the gravest failure first. */
 const ERRORS: {
   readonly [K in WebSearchFailure['kind']]: (
     failure: Extract<WebSearchFailure, { kind: K }>,
@@ -86,11 +96,11 @@ const ERRORS: {
 };
 const GRAVEST = Object.keys(ERRORS) as WebSearchFailure['kind'][];
 
-function errorOf(failures: readonly WebSearchFailure[]): AppError {
+function errorOf(failures: readonly WebSearchFailure[]): AppError | null {
   const [first] = [...failures].sort(
     (a, b) => GRAVEST.indexOf(a.kind) - GRAVEST.indexOf(b.kind),
   );
-  if (!first) return unavailable();
+  if (!first) return null;
   const error = ERRORS[first.kind] as (failure: WebSearchFailure) => AppError;
   return error(first);
 }
@@ -160,7 +170,10 @@ export class WebSearchService {
     return this.view();
   }
 
-  /** One search per kind. Both failing is an error; one failing is said in `failedKinds`. */
+  /**
+   * One search per kind, or per kind and author. A search that does not answer leaves the
+   * others' results (`partial`); with nothing found, why is said instead.
+   */
   async search(
     request: WebSearchRequest,
     alreadyOf: AlreadyOf,
@@ -168,50 +181,74 @@ export class WebSearchService {
     const key = this.usableKey();
     const sealed = this.config.connection?.key;
     if (key === null || sealed === undefined) throw notConnected();
-    const answers = await Promise.all(
-      request.kinds.map((kind) => this.searchKind(key, { kind, request })),
-    );
+    const answers = await this.ask(key, request);
     const creditsUsed = answers.reduce((sum, one) => sum + usedBy(one), 0);
-    const failed = answers.flatMap(failureOf);
-    await this.settle(sealed, { creditsUsed, failed });
-    if (failed.length === answers.length)
-      throw errorOf(failed.map((one) => one.failure));
-    const results = resultsOf(answers, { limit: request.limit, alreadyOf });
+    const failures = answers.flatMap(failureOf);
+    await this.settle(sealed, { creditsUsed, failures });
+    const found = interleave(answers.map(candidatesIn), request.sources);
     this.deps.log.info(
-      { kinds: request.kinds, results: results.length, creditsUsed },
+      { searches: answers.length, results: found.length, creditsUsed },
       'web search',
     );
+    if (found.length === 0) assertAnswered(answers, failures);
     return {
-      results,
-      failedKinds: failed.map((one) => one.kind),
+      results: found.map((one) => ({ ...one, already: alreadyOf(one.url) })),
+      partial: answers.some((one) => one.answer?.kind !== 'ok'),
       creditsUsed,
       creditsRemaining: this.known.credits?.remaining ?? null,
       low: this.isLow(),
     };
   }
 
-  private async searchKind(
+  /**
+   * Every search of the request, a few at once, in the request's order. After an answer that
+   * asking again would only repeat (no key, no credits, wait), the ones left are not made.
+   */
+  private async ask(
     key: string,
-    input: { kind: WebSearchKind; request: WebSearchRequest },
-  ): Promise<KindAnswer> {
-    const { kind, request } = input;
+    request: WebSearchRequest,
+  ): Promise<GroupAnswer[]> {
+    const groups = groupsOf(request);
+    const limit = groupLimit(request.sources, groups.length);
+    const answers: GroupAnswer[] = groups.map((group) => ({
+      group,
+      answer: null,
+    }));
+    const left = groups.map((group, at) => ({ group, at }));
+    const worker = async (): Promise<void> => {
+      for (let next = left.shift(); next; next = left.shift()) {
+        const { group, at } = next;
+        const answer = await this.askOne(key, { group, limit });
+        answers[at] = { group, answer };
+        if (STOPS.has(answer.kind)) left.length = 0;
+      }
+    };
+    await Promise.all(Array.from({ length: SEARCHES_AT_ONCE }, worker));
+    return answers;
+  }
+
+  private async askOne(
+    key: string,
+    { group, limit }: { group: SearchGroup; limit: number },
+  ): Promise<WebSearchAnswer> {
+    const { kind, query, domains } = group;
     const answer = await this.deps.web.search({
       key,
-      query: request.query,
-      limit: request.limit,
-      ...(kind === 'video' && { domains: VIDEO_DOMAINS }),
+      query,
+      limit,
+      ...(domains && { domains }),
     });
     if (answer.kind !== 'ok') this.warn(kind, answer);
-    return { kind, answer };
+    return answer;
   }
 
   /** What a search cost and showed about the key it was made with, unless it was replaced. */
   private async settle(
     sealed: string,
-    outcome: { creditsUsed: number; failed: readonly KindFailure[] },
+    outcome: { creditsUsed: number; failures: readonly WebSearchFailure[] },
   ): Promise<void> {
     if (this.config.connection?.key !== sealed) return;
-    const kinds = outcome.failed.map((one) => one.failure.kind);
+    const kinds = outcome.failures.map((failure) => failure.kind);
     this.known = {
       ...this.known,
       credits: kinds.includes('no-credits')
@@ -309,7 +346,7 @@ export class WebSearchService {
   }
 
   private warn(
-    asked: WebSearchKind | 'account',
+    asked: SearchGroup['kind'] | 'account',
     failure: WebSearchFailure,
   ): void {
     this.deps.log.warn({ asked, failure }, 'web search: Firecrawl failed');
@@ -329,34 +366,28 @@ export class WebSearchService {
   }
 }
 
-interface KindFailure {
-  readonly kind: WebSearchKind;
-  readonly failure: WebSearchFailure;
+const failureOf = ({ answer }: GroupAnswer): WebSearchFailure[] =>
+  answer === null || answer.kind === 'ok' ? [] : [answer];
+
+const usedBy = ({ answer }: GroupAnswer): number =>
+  answer?.kind === 'ok' ? answer.creditsUsed : 0;
+
+const candidatesIn = ({ group, answer }: GroupAnswer): Candidate[] =>
+  answer?.kind === 'ok' ? candidatesOf(answer.hits, group) : [];
+
+/** Nothing found: fine when every search that answered says so, else the reason is thrown. */
+function assertAnswered(
+  answers: readonly GroupAnswer[],
+  failures: readonly WebSearchFailure[],
+): void {
+  const answered = answers.some((one) => one.answer?.kind === 'ok');
+  const stopped = failures.filter((failure) => STOPS.has(failure.kind));
+  const error = errorOf(answered ? stopped : failures);
+  if (error) throw error;
 }
-
-const failureOf = ({ kind, answer }: KindAnswer): KindFailure[] =>
-  answer.kind === 'ok' ? [] : [{ kind, failure: answer }];
-
-const usedBy = ({ answer }: KindAnswer): number =>
-  answer.kind === 'ok' ? answer.creditsUsed : 0;
 
 const spent = (
   credits: WebSearchCredits | null,
   used: number,
 ): WebSearchCredits | null =>
   credits && { ...credits, remaining: Math.max(0, credits.remaining - used) };
-
-/** Every kind's candidates, in the order asked, with what the collection already has. */
-function resultsOf(
-  answers: readonly KindAnswer[],
-  input: { limit: number; alreadyOf: AlreadyOf },
-): WebSearchResult[] {
-  return answers.flatMap(({ kind, answer }) =>
-    answer.kind === 'ok'
-      ? candidatesOf(answer.hits, { kind, limit: input.limit }).map((one) => ({
-          ...one,
-          already: input.alreadyOf(one.url),
-        }))
-      : [],
-  );
-}

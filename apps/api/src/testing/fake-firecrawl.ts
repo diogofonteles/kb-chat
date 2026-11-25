@@ -1,3 +1,5 @@
+import type { WebSearchKind } from '@kb-chat/contracts';
+
 /** One search request as Firecrawl received it. */
 export interface FirecrawlSearchCall {
   readonly key: string;
@@ -22,23 +24,47 @@ const slugOf = (query: string): string =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
 
-const pages = (query: string): Hit[] =>
-  Array.from({ length: 4 }, (_, at) => ({
+/** Four texts, and a video that a search of texts must not give. */
+const texts = (query: string): Hit[] => [
+  ...Array.from({ length: 4 }, (_, at) => ({
     url: `https://www.exemplo.org/${slugOf(query)}/${at + 1}`,
-    title: `${query}: página ${at + 1}`,
-    description: `O que a página ${at + 1} diz sobre ${query}.`,
-  }));
+    title: `${query}: texto ${at + 1}`,
+    description: `O que o texto ${at + 1} diz sobre ${query}.`,
+  })),
+  {
+    url: 'https://www.youtube.com/watch?v=aaaaaaaaaa1',
+    title: `${query}: um vídeo entre os textos`,
+    description: 'Um vídeo, que não é um texto.',
+  },
+];
 
-const VIDEO_IDS = ['aaaaaaaaaa1', 'aaaaaaaaaa2'];
+/** Two audios and a profile, as Firecrawl mixes them. */
+const audios = (query: string): Hit[] => [
+  {
+    url: 'https://soundcloud.com/alguem',
+    title: 'Perfil',
+    description: 'Um perfil, que não é um áudio.',
+  },
+  {
+    url: `https://soundcloud.com/alguem/${slugOf(query)}`,
+    title: `${query}: áudio`,
+    description: `Um áudio sobre ${query}.`,
+  },
+  {
+    url: `https://archive.org/details/${slugOf(query)}`,
+    title: `${query}: palestra`,
+    description: `Uma palestra sobre ${query}.`,
+  },
+];
 
-/** Two real videos between a channel and a playlist, as Firecrawl mixes them. */
+/** Three videos, the same for any query, after a channel. */
 const videos = (query: string): Hit[] => [
   {
     url: 'https://www.youtube.com/@canal',
     title: `Canal sobre ${query}`,
     description: 'Um canal, que não é um vídeo.',
   },
-  ...VIDEO_IDS.map((id, at) => ({
+  ...['aaaaaaaaaa1', 'aaaaaaaaaa2'].map((id, at) => ({
     url: `https://www.youtube.com/watch?v=${id}&t=12s`,
     title: `${query}: vídeo ${at + 1}`,
     description: `Um vídeo sobre ${query}.`,
@@ -49,6 +75,19 @@ const videos = (query: string): Hit[] => [
     description: `Um filme sobre ${query}.`,
   },
 ];
+
+const HITS: Record<WebSearchKind, (query: string) => Hit[]> = {
+  text: texts,
+  audio: audios,
+  video: videos,
+};
+
+/** The kind a search is for, by the sites it is limited to. */
+const kindOf = (body: Readonly<Record<string, unknown>>): WebSearchKind => {
+  const domains = body['includeDomains'];
+  if (!Array.isArray(domains)) return 'text';
+  return domains.includes('youtube.com') ? 'video' : 'audio';
+};
 
 /**
  * Firecrawl's search and account without the network (KBC-185): a key ending in "valid" is
@@ -63,7 +102,7 @@ export class FakeFirecrawl {
   private revoked = false;
   private down = false;
   private limited = 0;
-  private broken: 'page' | 'video' | null = null;
+  private readonly broken = new Set<WebSearchKind>();
 
   /** Every key is refused from now on, as if revoked in Firecrawl's dashboard. */
   revokeKeys(): void {
@@ -84,9 +123,9 @@ export class FakeFirecrawl {
     this.limited = times;
   }
 
-  /** The searches of one kind fail with a 500. */
-  breakSearchesOf(kind: 'page' | 'video'): void {
-    this.broken = kind;
+  /** The searches of these kinds fail with a 500. */
+  breakSearchesOf(...kinds: WebSearchKind[]): void {
+    for (const kind of kinds) this.broken.add(kind);
   }
 
   readonly fetch: typeof fetch = async (input, init) => {
@@ -134,8 +173,8 @@ export class FakeFirecrawl {
         { status: 429, headers: { 'retry-after': '7' } },
       );
     }
-    const kind = body['includeDomains'] ? 'video' : 'page';
-    if (this.broken === kind) return new Response('oops', { status: 500 });
+    const kind = kindOf(body);
+    if (this.broken.has(kind)) return new Response('oops', { status: 500 });
     if (this.remaining(key) === 0)
       return Response.json(
         { success: false, error: 'Insufficient credits' },
@@ -146,13 +185,12 @@ export class FakeFirecrawl {
 
   private found(
     key: string,
-    { kind, query }: { kind: 'page' | 'video'; query: string },
+    { kind, query }: { kind: WebSearchKind; query: string },
   ): Response {
     this.spent.set(key, (this.spent.get(key) ?? 0) + CREDITS_PER_SEARCH);
-    const hits = kind === 'video' ? videos(query) : pages(query);
     return Response.json({
       success: true,
-      data: { web: query.includes('vazio') ? [] : hits },
+      data: { web: query.includes('vazio') ? [] : HITS[kind](query) },
       creditsUsed: CREDITS_PER_SEARCH,
     });
   }

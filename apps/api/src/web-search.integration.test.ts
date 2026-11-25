@@ -25,7 +25,7 @@ const SEARCH = '/api/v1/topics/hermetismo/web-search';
 const KEY = 'fc-live-secret-key-123-valid';
 const QUERY = 'a palavra perdida do oriente';
 const SLUG = 'a-palavra-perdida-do-oriente';
-const PAGES = { query: QUERY, kinds: ['page'] };
+const TEXTS = { query: QUERY, kinds: ['text'] };
 const SENDS = ['search', 'media', 'media-upload'];
 
 const connect = async (owner: Call, key = KEY) => {
@@ -49,36 +49,69 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
     const media = await startMedia();
     await connect(media.owner);
     const { call } = await ana(media);
-    const found = await call('POST', SEARCH, {
-      query: ` ${QUERY} `,
-      kinds: ['page', 'video'],
-    });
+    const found = await call('POST', SEARCH, { query: ` ${QUERY} ` });
     expect(found.statusCode, found.body).toBe(200);
     const body = found.json<WebSearchResponse>();
-    expect(body).toMatchObject({
-      failedKinds: [],
-      creditsUsed: 4,
-      creditsRemaining: 996,
-      low: false,
-    });
-    expect(body.results).toHaveLength(7);
+    expect(body).toMatchObject({ partial: false, creditsUsed: 6, low: false });
+    expect(body.results).toHaveLength(9);
     expect(body.results[0]).toEqual({
-      kind: 'page',
+      kind: 'text',
       url: `https://www.exemplo.org/${SLUG}/1`,
-      title: `${QUERY}: página 1`,
-      snippet: `O que a página 1 diz sobre ${QUERY}.`,
+      title: `${QUERY}: texto 1`,
+      snippet: `O que o texto 1 diz sobre ${QUERY}.`,
       site: 'exemplo.org',
+      author: null,
       already: null,
     });
     const uploads = await call('GET', '/api/v1/document-uploads');
     expect(uploads.json()).toEqual({ items: [] });
   });
 
+  it('finds by author, up to the sources wanted, and tells the balance to masters only', async () => {
+    const media = await startMedia();
+    await connect(media.owner);
+    const { call } = await ana(media);
+    const request = {
+      query: QUERY,
+      sources: 3,
+      kinds: ['text', 'video'],
+      authors: ['Hermes', ' Manly Hall '],
+    };
+    const body = (
+      await call('POST', SEARCH, request)
+    ).json<WebSearchResponse>();
+    expect(body.results.map((one) => [one.kind, one.author])).toEqual([
+      ['text', 'Hermes'],
+      ['video', 'Hermes'],
+      ['text', 'Manly Hall'],
+    ]);
+    expect(media.started.firecrawl.searches.map((one) => one.body)).toEqual(
+      [
+        [`${QUERY} "Hermes"`, undefined],
+        [`${QUERY} "Hermes"`, ['youtube.com', 'vimeo.com']],
+        [`${QUERY} "Manly Hall"`, undefined],
+        [`${QUERY} "Manly Hall"`, ['youtube.com', 'vimeo.com']],
+      ].map(([query, includeDomains]) =>
+        expect.objectContaining({
+          query,
+          limit: 4,
+          ...(includeDomains && { includeDomains }),
+        }),
+      ),
+    );
+    expect(body).toMatchObject({ creditsUsed: 8, creditsRemaining: null });
+    const seen = await media.owner('POST', SEARCH, request);
+    expect(seen.json()).toMatchObject({
+      creditsUsed: 8,
+      creditsRemaining: 984,
+    });
+  });
+
   it('is refused without the permission, spending nothing', async () => {
     const media = await startMedia();
     await connect(media.owner);
     const { call } = await ana(media, ['search', 'media']);
-    const found = await call('POST', SEARCH, PAGES);
+    const found = await call('POST', SEARCH, TEXTS);
     expect(found.statusCode).toBe(403);
     expect((await call('GET', AVAILABLE)).statusCode).toBe(403);
     expect(media.started.firecrawl.searches).toEqual([]);
@@ -96,7 +129,7 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
       const found = await who(
         'POST',
         `/api/v1/topics/${topic}/web-search`,
-        PAGES,
+        TEXTS,
       );
       expect(found.statusCode, found.body).toBe(404);
       expect(errorOf(found)).toBe('TOPIC_NOT_FOUND');
@@ -119,14 +152,16 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
     }
   });
 
-  it('refuses a query that is too short, and an unknown kind', async () => {
+  it('refuses a short subject, an unknown kind, too many sources or authors', async () => {
     const media = await startMedia();
     await connect(media.owner);
     for (const body of [
-      { query: 'ab', kinds: ['page'] },
+      { query: 'ab' },
       { query: QUERY, kinds: [] },
-      { query: QUERY, kinds: ['audio'] },
-      { query: QUERY, kinds: ['page'], limit: 31 },
+      { query: QUERY, kinds: ['page'] },
+      { query: QUERY, sources: 31 },
+      { query: QUERY, authors: ['Hermes', 'hermes'] },
+      { query: QUERY, authors: ['1a', '2a', '3a', '4a', '5a', '6a'] },
     ])
       expect((await media.owner('POST', SEARCH, body)).statusCode).toBe(400);
     expect(media.started.firecrawl.searches).toEqual([]);
@@ -137,9 +172,9 @@ describe('Who searches the web (KBC-185, KBC-009 R4)', () => {
     await connect(media.owner);
     const { call } = await ana(media);
     const codes = async (who: Call) =>
-      (await who('POST', SEARCH, PAGES)).statusCode;
+      (await who('POST', SEARCH, TEXTS)).statusCode;
     expect([await codes(call), await codes(call)]).toEqual([200, 200]);
-    const third = await call('POST', SEARCH, PAGES);
+    const third = await call('POST', SEARCH, TEXTS);
     expect(third.statusCode).toBe(429);
     expect(errorOf(third)).toBe('RATE_LIMITED');
     expect(await codes(media.owner)).toBe(200);
@@ -155,7 +190,7 @@ describe('What a search answers when it cannot search', () => {
       connected: false,
       low: false,
     });
-    const found = await call('POST', SEARCH, PAGES);
+    const found = await call('POST', SEARCH, TEXTS);
     expect(found.statusCode).toBe(409);
     expect(errorOf(found)).toBe('WEB_SEARCH_NOT_CONNECTED');
   });
@@ -163,14 +198,14 @@ describe('What a search answers when it cannot search', () => {
   it('says the credits ended, that it must wait, and that Firecrawl is down', async () => {
     const media = await startMedia();
     await connect(media.owner, 'fc-empty-account-valid');
-    const spent = await media.owner('POST', SEARCH, PAGES);
+    const spent = await media.owner('POST', SEARCH, TEXTS);
     expect(spent.statusCode).toBe(402);
     expect(errorOf(spent)).toBe('WEB_SEARCH_NO_CREDITS');
 
     await connect(media.owner);
     const { firecrawl } = media.started;
     firecrawl.rateLimitNext(1);
-    const limited = await media.owner('POST', SEARCH, PAGES);
+    const limited = await media.owner('POST', SEARCH, TEXTS);
     expect(limited.statusCode).toBe(429);
     expect(limited.json().error).toMatchObject({
       code: 'RATE_LIMITED',
@@ -178,24 +213,21 @@ describe('What a search answers when it cannot search', () => {
     });
 
     firecrawl.goDown();
-    const down = await media.owner('POST', SEARCH, PAGES);
+    const down = await media.owner('POST', SEARCH, TEXTS);
     expect(down.statusCode).toBe(503);
     expect(errorOf(down)).toBe('WEB_SEARCH_UNAVAILABLE');
   });
 
-  it('gives what the pages found when the videos failed, and names the kind', async () => {
+  it('gives what the texts found when the videos failed, saying it is partial', async () => {
     const media = await startMedia();
     await connect(media.owner);
     media.started.firecrawl.breakSearchesOf('video');
     const found = await media.owner('POST', SEARCH, {
       query: QUERY,
-      kinds: ['page', 'video'],
+      kinds: ['text', 'video'],
     });
     expect(found.statusCode).toBe(200);
-    expect(found.json()).toMatchObject({
-      failedKinds: ['video'],
-      creditsUsed: 2,
-    });
+    expect(found.json()).toMatchObject({ partial: true, creditsUsed: 2 });
   });
 });
 
@@ -226,7 +258,7 @@ describe('What the collection already has', () => {
   }
 
   const searched = async (call: Call) => {
-    const found = await call('POST', SEARCH, PAGES);
+    const found = await call('POST', SEARCH, TEXTS);
     expect(found.statusCode, found.body).toBe(200);
     const { results } = found.json<WebSearchResponse>();
     return { body: found.body, already: results.map((one) => one.already) };
@@ -297,7 +329,7 @@ describe('The house’s Firecrawl key', () => {
     });
     const seen = await media.owner('GET', SETTINGS);
     const { call } = await ana(media);
-    const found = await call('POST', SEARCH, PAGES);
+    const found = await call('POST', SEARCH, TEXTS);
     const available = await call('GET', AVAILABLE);
     expect(available.json()).toEqual({ connected: true, low: false });
     for (const { body } of [saved, seen, found, available])
