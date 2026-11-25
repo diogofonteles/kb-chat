@@ -3,6 +3,11 @@ import { mediaProgressOf } from './document-uploads-factory.js';
 
 type Wiring = Parameters<typeof mediaProgressOf>[0];
 
+interface MediaProgressExpected {
+  readonly state: string;
+  readonly step: { readonly step: string; readonly percent: number | null };
+}
+
 const ID = '11111111-1111-4111-8111-111111111111';
 
 /** The library with one recording, as far as its progress reads it. */
@@ -39,57 +44,61 @@ describe('where a recording sent by its link is (KBC-184)', () => {
     expect(mediaProgressOf(library({ media: null }), ID)).toBeNull();
   });
 
+  const transcribing = (
+    step: string,
+    percent: number | null = null,
+  ): MediaProgressExpected => ({
+    state: 'transcribing',
+    step: { step, percent },
+  });
+
   it.each([
-    ['its conversion failed', { media: { status: 'failed' } }, 'failed', null],
+    [
+      'its conversion failed',
+      { media: { status: 'failed' } },
+      { state: 'failed', step: null },
+    ],
     [
       'it is live in the collection',
       { media: { version: 1 }, publication: 'live' },
-      'ready',
-      null,
+      { state: 'ready', step: null },
     ],
     [
       'it is being prepared',
       { media: { status: 'processing', progress: 30 } },
-      'transcribing',
-      { step: 'preparing', percent: 30 },
+      transcribing('preparing', 30),
     ],
     [
       'it waits to be transcribed',
       { media: { jobStatus: 'queued' } },
-      'transcribing',
-      { step: 'waiting', percent: null },
+      transcribing('waiting'),
     ],
     [
       'it is being transcribed',
       { media: { jobStatus: 'leased' } },
-      'transcribing',
-      { step: 'transcribing', percent: 42 },
+      transcribing('transcribing', 42),
     ],
     [
       'it did not transcribe: it waits for a person',
       { media: { jobStatus: 'failed' } },
-      'transcribing',
-      { step: 'attention', percent: null },
+      transcribing('attention'),
     ],
     [
       'it is transcribed, with tracks to review',
       { media: { version: 1 } },
-      'transcribing',
-      { step: 'attention', percent: null },
+      transcribing('attention'),
     ],
     [
       'it is being published',
       { media: { version: 1 }, publication: 'publishing' },
-      'transcribing',
-      { step: 'publishing', percent: null },
+      transcribing('publishing'),
     ],
     [
       'its publication failed: whole here, it is never sent again from its link (I5)',
       { media: { version: 1 }, publication: 'failed' },
-      'transcribing',
-      { step: 'attention', percent: null },
+      transcribing('attention'),
     ],
-  ] as const)('%s', (_name, of, state, step) => {
-    expect(mediaProgressOf(library(of), ID)).toEqual({ state, step });
+  ])('%s', (_name, of, expected) => {
+    expect(mediaProgressOf(library(of), ID)).toEqual(expected);
   });
 });
