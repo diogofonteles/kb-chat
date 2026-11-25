@@ -68,7 +68,7 @@ export class RemovalService {
     await this.deps.records.put(record);
     await this.deps.catalog.refresh(found.topic);
     await this.deps.left?.(found.topic, found.document.id);
-    return toRemoval(record);
+    return this.toRemoval(record);
   }
 
   /** A text of the collection or of a sub-collection, by its id in the one asked about. */
@@ -111,7 +111,7 @@ export class RemovalService {
     const nothingToMove = !isPending(asked) && asked.lease === null;
     if (nothingToMove) await this.deps.records.remove(id);
     await this.deps.catalog.refresh(record.topic);
-    return nothingToMove ? null : toRemoval(asked);
+    return nothingToMove ? null : this.toRemoval(asked);
   }
 
   /** The Mac gave up on it: asked again as it was. */
@@ -124,7 +124,7 @@ export class RemovalService {
       detail: null,
     }));
     if (!again) throw notFound();
-    return toRemoval(again);
+    return this.toRemoval(again);
   }
 
   list(actor: RemovalActor): DocumentRemoval[] {
@@ -132,7 +132,17 @@ export class RemovalService {
       .all()
       .filter((one) => actor.canSee(one.topic))
       .sort((a, b) => b.removedAt.localeCompare(a.removedAt))
-      .map(toRemoval);
+      .map((one) => this.toRemoval(one));
+  }
+
+  private toRemoval(record: RemovalRecord): DocumentRemoval {
+    const { id, topic, document, detail, by, removedAt } = record;
+    return {
+      ...{ id, topic, document, detail, removedAt },
+      collection: this.deps.catalog.get(topic)?.topic.title ?? topic,
+      state: stateOf(record),
+      by: by.name || by.email,
+    };
   }
 
   private visible(actor: RemovalActor, id: string): RemovalRecord {
@@ -147,13 +157,3 @@ function stateOf(record: RemovalRecord): DocumentRemovalState {
   if (record.wish === 'present') return 'restoring';
   return record.isQuarantined ? 'removed' : 'removing';
 }
-
-const toRemoval = (record: RemovalRecord): DocumentRemoval => ({
-  id: record.id,
-  topic: record.topic,
-  document: record.document,
-  state: stateOf(record),
-  detail: record.detail,
-  by: record.by.name || record.by.email,
-  removedAt: record.removedAt,
-});

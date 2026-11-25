@@ -184,6 +184,10 @@ const DECLARED: Readonly<Record<string, Readonly<Record<string, string>>>> = {
       'what the Mac must publish and the folders it may use, never a person',
     listMedia: 'the reconciler of track documents, never a person',
   },
+  'modules/document-removals/removal-service.ts': {
+    scopeView:
+      'masters only (the route): finds the document by its scope id, then asks seesDocument (KBC-187)',
+  },
   'document-uploads-factory.ts': {
     topics: 'titles and domains for the Mac to make a vault folder, no entries',
     get: 'whether a document arrived, and the level check that decides if it is named',

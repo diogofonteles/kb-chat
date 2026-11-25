@@ -12,7 +12,11 @@ import {
   type LevelView,
   type StoredLevel,
 } from '../access-levels/index.js';
-import { maskConversation, type ScopeOf } from './conversation-mask.js';
+import {
+  maskConversation,
+  maskRemoved,
+  type ScopeOf,
+} from './conversation-mask.js';
 import { unmaskResearchTurns } from './research-turns.js';
 
 const AT = '2026-11-10T12:00:00.000Z';
@@ -228,6 +232,35 @@ describe('maskConversation (KBC-110)', () => {
 
     expect(maskConversation(stored, OPEN_VIEW, scopeOf)).toBe(stored);
     expect(maskConversation(stored, viewAt(2), scopeOf)).toEqual(stored);
+  });
+});
+
+describe('maskRemoved (KBC-187 BR-5)', () => {
+  const isRemoved = (_topic: string, id: string) => id === 'raw/qs-1.md';
+
+  it('closes a removed source for everyone and keeps the prose', () => {
+    const [masked] = turnsOf(maskRemoved(conversation(), isRemoved));
+    expect(masked?.answer).toBe('A lua [1] [2] [3].');
+    expect(masked?.sources[0]).toEqual({ n: 1, restricted: true });
+    expect(masked?.sources.slice(1)).toEqual(SOURCES.slice(1));
+    expect(masked?.restrictedSources).toBe(1);
+  });
+
+  it('drops what a sweep found in it, and gives it all back when it is written', () => {
+    const stored = conversation([
+      turn({ sweep: { ...CURSOR, after: 'raw/qs-1.md' } }),
+    ]);
+    const masked = maskRemoved(stored, isRemoved) as ResearchConversation;
+    expect(masked.turns[0]?.sweep).not.toHaveProperty('after');
+    expect(masked.turns[0]?.sweep?.findings.map(({ id }) => id)).not.toContain(
+      'raw/qs-1.md',
+    );
+    expect(unmaskResearchTurns(masked, stored)).toEqual(stored);
+  });
+
+  it('leaves a conversation that cites none of it as it is', () => {
+    const stored = conversation();
+    expect(maskRemoved(stored, () => false)).toBe(stored);
   });
 });
 

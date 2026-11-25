@@ -433,7 +433,7 @@ export class DocumentUploadService {
     const there = this.repeated(actor, record.topic, key);
     // Taken out of the quarantine and then failed in kb's steps, it is its own document.
     const own = record.refused.document.replace('raw/_quarantine/', 'raw/');
-    if (there && there.document?.id !== own)
+    if (there?.outcome === 'duplicate' && there.document?.id !== own)
       throw new AppError('DOCUMENT_DUPLICATE', 'It is there, or on its way');
     const accepted = await this.deps.records.update(id, (current) => ({
       ...current,

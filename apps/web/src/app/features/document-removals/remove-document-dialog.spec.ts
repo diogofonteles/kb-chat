@@ -13,6 +13,7 @@ const ID = '11111111-1111-4111-8111-111111111111';
 const REMOVAL: DocumentRemoval = {
   id: ID,
   topic: 'hermetismo',
+  collection: 'Hermetismo',
   document: { id: 'raw/livro.md', title: 'O Livro' },
   state: 'removing',
   detail: null,

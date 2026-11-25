@@ -88,7 +88,7 @@ const STATES: Record<
               <p class="title">{{ one.document.title }}</p>
               <p class="meta">
                 <span i18n="@@removed.meta"
-                  >{{ one.topic }} · {{ one.by }} · {{ when(one) }}</span
+                  >{{ one.collection }} · {{ one.by }} · {{ when(one) }}</span
                 >
               </p>
               @if (one.detail) {

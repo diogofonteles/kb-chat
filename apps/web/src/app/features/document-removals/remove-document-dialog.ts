@@ -30,6 +30,8 @@ import { finalize, type Observable } from 'rxjs';
       titleId="remove-document-title"
       [title]="heading"
       [width]="480"
+      [lift]="52"
+      [confirm]="true"
       (closed)="left()"
     >
       @if (removalId()) {

@@ -21,6 +21,8 @@ export type DocumentRemovalState = z.infer<typeof documentRemovalStateSchema>;
 export const documentRemovalSchema = z.object({
   id: z.uuid(),
   topic: topicSlugSchema,
+  /** The collection's name. */
+  collection: z.string(),
   document: uploadedDocumentRefSchema,
   state: documentRemovalStateSchema,
   /** The Mac's words, when it failed. */

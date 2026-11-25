@@ -14,6 +14,7 @@ const ID = '11111111-1111-4111-8111-111111111111';
 const removal = (fields: Partial<DocumentRemoval> = {}): DocumentRemoval => ({
   id: ID,
   topic: 'hermetismo',
+  collection: 'Hermetismo',
   document: { id: 'raw/livro.md', title: 'O Livro' },
   state: 'removed',
   detail: null,
@@ -45,7 +46,7 @@ describe('RemovedDocuments (KBC-187)', () => {
   it('lists what left, by whom, and brings it back', async () => {
     const { http, fixture } = await shown([removal()]);
     expect(screen.getByText('O Livro')).toBeTruthy();
-    expect(screen.getByText(/hermetismo · Dono/)).toBeTruthy();
+    expect(screen.getByText(/Hermetismo · Dono/)).toBeTruthy();
     fireEvent.click(
       screen.getByRole('button', { name: 'Trazer de volta O Livro' }),
     );
