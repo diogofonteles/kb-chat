@@ -352,3 +352,15 @@ select.unchosen {
     --ui-cover-size: 140px !important;
   }
 }
+
+/* "Criar e adicionar conteúdo" (KBC-184): under the fields, as wide as they are. */
+.create-and-add {
+  min-height: 2.75rem;
+  margin-top: var(--space-4);
+}
+
+@media (max-width: 1023px) {
+  .create-and-add {
+    width: 100%;
+  }
+}

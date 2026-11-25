@@ -24,9 +24,20 @@
   background: var(--overlay-2);
 }
 
-.row > button {
+.actions {
+  display: flex;
+  flex-wrap: wrap;
   grid-column: 2 / -1;
-  justify-self: start;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.actions:empty {
+  display: none;
+}
+
+.actions button {
+  min-height: 2.75rem;
 }
 
 .art {
@@ -75,7 +86,8 @@
     grid-template-columns: auto minmax(0, 1fr) auto auto;
   }
 
-  .row > button {
+  .actions {
     grid-column: auto;
+    justify-content: flex-end;
   }
 }

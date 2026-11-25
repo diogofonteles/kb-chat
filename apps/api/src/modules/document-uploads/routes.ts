@@ -104,32 +104,33 @@ function registerList(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
   );
 }
 
+const BATCH_OPTIONS = {
+  config: { access: UPLOAD },
+  schema: {
+    params: uploadParams,
+    body: changeDocumentBatchRequestSchema,
+    response: { 200: documentBatchSchema },
+  },
+};
+
+const REMOVE_OPTIONS = {
+  config: { access: UPLOAD },
+  schema: { params: uploadParams, response: { 204: z.undefined() } },
+};
+
 /** An inclusion's ceiling, and an item taken out (KBC-009 R3). */
 function registerChanges(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  typed.patch(
-    '/api/v1/document-batches/:id',
-    {
-      config: { access: UPLOAD },
-      schema: {
-        params: uploadParams,
-        body: changeDocumentBatchRequestSchema,
-        response: { 200: documentBatchSchema },
-      },
-    },
-    async (request) =>
-      deps.service.changeBatch(
-        deps.actorOf(request),
-        request.params.id,
-        request.body.capUsd,
-      ),
+  typed.patch('/api/v1/document-batches/:id', BATCH_OPTIONS, async (request) =>
+    deps.service.changeBatch(
+      deps.actorOf(request),
+      request.params.id,
+      request.body.capUsd,
+    ),
   );
   typed.delete(
     '/api/v1/document-uploads/:id',
-    {
-      config: { access: UPLOAD },
-      schema: { params: uploadParams, response: { 204: z.undefined() } },
-    },
+    REMOVE_OPTIONS,
     async (request, reply) => {
       await deps.service.remove(deps.actorOf(request), request.params.id);
       return reply.code(204).send();

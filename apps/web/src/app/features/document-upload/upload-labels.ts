@@ -65,6 +65,10 @@ export const FAILURE_TEXTS: Record<DocumentUploadFailure, () => string> = {
 export const isSettled = (state: DocumentUploadState): boolean =>
   state === 'ready' || state === 'failed';
 
+/** The Mac has it, or its bytes are arriving: it cannot be taken out now. */
+export const isWorking = (state: DocumentUploadState): boolean =>
+  state === 'converting' || state === 'classifying' || state === 'mapping';
+
 /** "No mapa" waits for the next sync to the app; the rest waits for the Mac. */
 export const WAITING_HINTS: Partial<Record<DocumentUploadState, () => string>> =
   {
@@ -73,5 +77,5 @@ export const WAITING_HINTS: Partial<Record<DocumentUploadState, () => string>> =
     mapped: () =>
       $localize`:@@docUploads.hint.mapped:Chega à busca com a próxima sincronização do acervo.`,
     receiving: () =>
-      $localize`:@@docUploads.hint.receiving:O envio continua de onde parou se você abrir a janela de envio de novo.`,
+      $localize`:@@docUploads.hint.receiving:Se o envio parou, inclua o mesmo arquivo de novo: ele continua de onde estava.`,
   };

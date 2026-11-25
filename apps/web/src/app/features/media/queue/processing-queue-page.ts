@@ -29,8 +29,10 @@ import type { Observable } from 'rxjs';
 import { ProcessingQueueStore } from './processing-queue-store.js';
 import { UiButton, UiCover, UiIcon } from '@ui/index.js';
 import { QueueRow, type QueueMove } from './queue-row.js';
-import type { OpenedDocument } from '@features/document-upload/document-upload-dialog.js';
-import { DocumentUploadsSection } from '@features/document-upload/document-uploads-section.js';
+import {
+  DocumentUploadsSection,
+  type OpenedDocument,
+} from '@features/document-upload/document-uploads-section.js';
 import { DocumentUploadsStore } from '@features/document-upload/document-uploads-store.js';
 
 /** The sections of the queue: what needs the person first (UP-02). */

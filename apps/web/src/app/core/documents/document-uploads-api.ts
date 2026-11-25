@@ -3,9 +3,11 @@ import { Injectable, inject } from '@angular/core';
 import {
   MEDIA_UPLOAD_PART_BYTES,
   createDocumentUploadResponseSchema,
+  documentBatchSchema,
   documentUploadListSchema,
   type CreateDocumentUploadRequest,
   type CreateDocumentUploadResponse,
+  type DocumentBatch,
   type DocumentUpload,
 } from '@kb-chat/contracts';
 import { BusyWork } from '@core/app-version/busy-work.js';
@@ -54,6 +56,18 @@ export class DocumentUploadsApi {
     return this.http
       .post(documentsUrl(topic), request)
       .pipe(map((body) => createDocumentUploadResponseSchema.parse(body)));
+  }
+
+  /** A new ceiling for an inclusion: what waited for it goes on (KBC-009 R3). */
+  changeBatch(id: string, capUsd: number): Observable<DocumentBatch> {
+    return this.http
+      .patch(`/api/v1/document-batches/${id}`, { capUsd })
+      .pipe(map((body) => documentBatchSchema.parse(body)));
+  }
+
+  /** Cancels an item the Mac does not have, or takes one that ended off the list. */
+  remove(id: string): Observable<unknown> {
+    return this.http.delete(`${documentUploadsUrl()}/${id}`);
   }
 
   /** The file's bytes over tus, from wherever the server stopped; unsubscribing stops. */

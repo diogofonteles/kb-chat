@@ -52,6 +52,18 @@
       >
     </button>
     @if (expanded()) {
+      @if (canAddContent()) {
+        <a
+          uiButton="outline"
+          class="wide-action"
+          [routerLink]="addContentPath"
+          [queryParams]="addContentQuery(chat.topicSlug())"
+          (click)="openAddContent()"
+        >
+          <ui-icon name="upload" [size]="16" />
+          <span i18n="@@library.addContent">Adicionar conteúdo</span>
+        </a>
+      }
       @if (canCreateCollections()) {
         <button
           uiButton="white"
@@ -378,6 +390,21 @@
             </button>
           }
         </div>
+        @if (canAddContent() && !mobile() && !headless()) {
+          <!-- KBC-184: what goes into the collection in use; folded, only its icon. -->
+          <a
+            class="add-content"
+            [routerLink]="addContentPath"
+            [queryParams]="addContentQuery(chat.topicSlug())"
+            [attr.aria-label]="collapsed() ? addContentLabel : null"
+            (click)="openAddContent()"
+          >
+            <ui-icon name="upload" [size]="16" />
+            <span class="add-content-text" i18n="@@library.addContent"
+              >Adicionar conteúdo</span
+            >
+          </a>
+        }
         @if (isOpen('section:collections')) {
           <ul [id]="ns() + '-collections'" class="items tree">
             @for (node of collectionNodes(); track node.entry.topic.slug) {
@@ -852,6 +879,16 @@
           <ui-icon name="folder" [size]="18" />
           <span i18n="@@library.openCollection">Abrir acervo</span>
         </button>
+        @if (canAddContent() && entry.topic.canOpen) {
+          <button
+            uiMenuItem
+            type="button"
+            (click)="rowMenu.close(); addTo(entry.topic)"
+          >
+            <ui-icon name="upload" [size]="18" />
+            <span i18n="@@library.addContent">Adicionar conteúdo</span>
+          </button>
+        }
         @if (entry.topic.canRename && canCreateCollections()) {
           <button
             uiMenuItem
@@ -887,6 +924,17 @@
   @if (mobile()) {
     <!-- v2 · Menu: the drawn rows stay in reach at the sheet's foot however long the list. -->
     <div class="menu-actions drawn">
+      @if (canAddContent()) {
+        <a
+          class="action"
+          [routerLink]="addContentPath"
+          [queryParams]="addContentQuery(chat.topicSlug())"
+          (click)="openAddContent()"
+        >
+          <ui-icon name="upload" [size]="20" />
+          <span i18n="@@library.addContent">Adicionar conteúdo</span>
+        </a>
+      }
       @if (canCreateCollections()) {
         <!-- "Novo acervo" is the "+" of the Acervos head above (KBC-164 FR-2). -->
         @if (chat.topic(); as current) {
@@ -1019,15 +1067,10 @@
   </div>
 </ng-template>
 
-<app-document-upload-dialog
-  #documentDialog
-  [topic]="chat.topicSlug()"
-  [topicTitle]="currentTopicTitle()"
-  (documentOpened)="openDocument($event)"
-/>
-
 <app-collection-dialog
   #collectionDialog
   [topics]="chat.topicList()"
+  [offersContent]="canAddContent()"
   (saved)="collectionSaved($event)"
+  (contentWanted)="addTo($event)"
 />

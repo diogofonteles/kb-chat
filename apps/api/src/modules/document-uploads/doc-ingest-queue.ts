@@ -119,26 +119,39 @@ export class DocIngestQueue {
         this.later(this.giveUp(record, 'the Mac lost the job too many times'));
         continue;
       }
-      const budgetUsd = Math.min(
-        monthUsd,
-        batchLeftUsd(this.deps.records.all(), record),
-      );
-      const leased: DocumentUploadRecord = {
-        ...record,
-        attempts,
-        state: 'converting',
-        lease: {
-          leaseId: randomUUID(),
-          worker,
-          until: new Date(now.getTime() + DOC_INGEST_LEASE_MS).toISOString(),
-          budgetUsd,
-        },
-        updatedAt: now.toISOString(),
-      };
+      const leased = this.leasedTo(worker, { record, attempts, monthUsd });
       this.later(this.deps.records.put(leased));
-      return this.jobOf(leased, budgetUsd);
+      return this.jobOf(leased);
     }
     return null;
+  }
+
+  /** The record as leased now, with what it may spend: the month's or its inclusion's left. */
+  private leasedTo(
+    worker: string,
+    input: {
+      record: DocumentUploadRecord;
+      attempts: number;
+      monthUsd: number;
+    },
+  ): DocumentUploadRecord {
+    const { record, attempts, monthUsd } = input;
+    const now = this.now();
+    return {
+      ...record,
+      attempts,
+      state: 'converting',
+      lease: {
+        leaseId: randomUUID(),
+        worker,
+        until: new Date(now.getTime() + DOC_INGEST_LEASE_MS).toISOString(),
+        budgetUsd: Math.min(
+          monthUsd,
+          batchLeftUsd(this.deps.records.all(), record),
+        ),
+      },
+      updatedAt: now.toISOString(),
+    };
   }
 
   /** Oldest first; `topic` keeps to one collection (the E2E fake Mac, as kb-publish's). */
@@ -150,7 +163,7 @@ export class DocIngestQueue {
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
-  private jobOf(record: DocumentUploadRecord, budgetUsd: number): DocIngestJob {
+  private jobOf(record: DocumentUploadRecord): DocIngestJob {
     const collection = this.deps.collectionOf?.(record.topic) ?? null;
     return {
       ...(collection && { collection }),
@@ -160,7 +173,7 @@ export class DocIngestQueue {
       topic: record.topic,
       attempt: record.attempts + 1,
       leaseMs: DOC_INGEST_LEASE_MS,
-      budgetUsd,
+      budgetUsd: record.lease?.budgetUsd ?? 0,
       source: sourceOf(record),
     };
   }

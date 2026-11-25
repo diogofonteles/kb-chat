@@ -1,0 +1,332 @@
+<section class="page" aria-labelledby="add-content-title">
+  <header class="head">
+    <a
+      class="back"
+      routerLink="/"
+      aria-label="Voltar"
+      i18n-aria-label="@@addContent.back"
+    >
+      <ui-icon name="chevLeft" [size]="26" />
+    </a>
+    <div class="head-text">
+      <h1
+        id="add-content-title"
+        #heading
+        class="heading"
+        tabindex="-1"
+        i18n="@@addContent.title"
+      >
+        Adicionar conteúdo
+      </h1>
+      <p class="sub" i18n="@@addContent.subtitle">
+        Documentos, páginas da web, áudios e vídeos entram no acervo e passam a
+        responder na busca e na Pesquisa com IA.
+      </p>
+    </div>
+  </header>
+
+  <div class="body">
+    <div class="where">
+      <div class="ui-field">
+        <label class="ui-field__label" for="add-topic" i18n="@@addContent.topic"
+          >Acervo</label
+        >
+        <select
+          #topicSelect
+          id="add-topic"
+          class="ui-input big"
+          [value]="topic()"
+          (change)="chooseTopic(topicSelect.value)"
+        >
+          @for (option of topics(); track option.slug) {
+            <option [value]="option.slug" [selected]="option.slug === topic()">
+              {{ treeTitle(option) }}
+            </option>
+          }
+        </select>
+      </div>
+      @if (canCreateCollections()) {
+        <button
+          uiButton="outline"
+          type="button"
+          class="new-collection"
+          (click)="collectionDialog.openNew()"
+        >
+          <ui-icon name="plus" [size]="18" />
+          <span i18n="@@library.newCollection">Novo acervo</span>
+        </button>
+      }
+    </div>
+
+    @if (levels.shown()) {
+      <app-level-field
+        [choices]="levels.levels()"
+        [label]="levelLabel"
+        [loading]="levels.loading()"
+        [failed]="levels.failed()"
+        [retrying]="levels.retrying()"
+        [invalid]="levelInvalid()"
+        [(level)]="level"
+        (retried)="levels.reload()"
+      />
+    }
+
+    <div
+      class="ways"
+      role="group"
+      aria-label="O que adicionar"
+      i18n-aria-label="@@addContent.what"
+    >
+      @for (one of ways; track one.way) {
+        <button
+          uiChip
+          type="button"
+          class="way"
+          [selected]="way() === one.way"
+          (click)="choose(one.way)"
+        >
+          <ui-icon [name]="one.icon" [size]="18" />
+          {{ one.label }}
+        </button>
+      }
+    </div>
+
+    @switch (way()) {
+      @case ('files') {
+        <div
+          class="drop"
+          [class.over]="dragging()"
+          (dragover)="$event.preventDefault(); dragging.set(true)"
+          (dragleave)="dragging.set(false)"
+          (drop)="dropped($event)"
+        >
+          <ui-icon name="upload" [size]="32" />
+          <button uiButton="white" type="button" (click)="fileInput.click()">
+            <span i18n="@@addContent.choose">Escolher arquivos</span>
+          </button>
+          <p class="hint" id="add-files-hint" i18n="@@addContent.fileTypes">
+            PDF (também escaneado), Word, PowerPoint, Excel, EPUB, TXT,
+            Markdown, imagem, CSV ou JSON, até 300 MB cada. O original fica
+            guardado.
+          </p>
+          <input
+            #fileInput
+            class="visually-hidden"
+            type="file"
+            multiple
+            [accept]="accept"
+            tabindex="-1"
+            aria-hidden="true"
+            (change)="filesChosen($event)"
+          />
+        </div>
+        @if (files().length > 0) {
+          <ul
+            class="rows"
+            aria-label="Arquivos escolhidos"
+            i18n-aria-label="@@addContent.chosen"
+          >
+            @for (one of files(); track one.key) {
+              <li class="row">
+                <ui-icon name="file" [size]="20" />
+                <div class="row-text">
+                  <p class="name">{{ one.file.name }}</p>
+                  @if (one.problem) {
+                    <p class="problem">{{ one.problem }}</p>
+                  }
+                </div>
+                <button
+                  uiIconButton
+                  type="button"
+                  [size]="44"
+                  aria-label="Tirar {{ one.file.name }} da lista"
+                  i18n-aria-label="@@addContent.removeFile"
+                  (click)="removeFile(one.key)"
+                >
+                  <ui-icon name="close" [size]="18" />
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      }
+      @case ('links') {
+        <div class="ui-field">
+          <label
+            class="ui-field__label"
+            for="add-links"
+            i18n="@@addContent.links"
+            >Endereços</label
+          >
+          <textarea
+            #linksInput
+            id="add-links"
+            class="ui-input big links"
+            rows="5"
+            inputmode="url"
+            autocapitalize="off"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="https://"
+            aria-describedby="add-links-hint add-links-count"
+            [value]="text()"
+            (input)="text.set(linksInput.value)"
+          ></textarea>
+          <p
+            class="ui-field__hint"
+            id="add-links-hint"
+            i18n="@@addContent.linksHint"
+          >
+            Um por linha. Uma página vira texto; um vídeo do YouTube é
+            transcrito e entra como gravação.
+          </p>
+          <p class="count" id="add-links-count" role="status">
+            @if (tooManyLinks()) {
+              <span class="problem" i18n="@@addContent.tooMany"
+                >Inclua até 50 endereços por vez.</span
+              >
+            } @else if (parsed().links.length > 0) {
+              <span
+                i18n="@@addContent.linkCount"
+                >{parsed().links.length, plural,
+                  =1 {1 endereço pronto}
+                  other {{{ parsed().links.length }} endereços prontos}
+                }</span
+              >
+            }
+            @if (parsed().refused.length > 0) {
+              <span class="problem" i18n="@@addContent.linkRefused"
+                >Não é um endereço: {{ parsed().refused.join(', ') }}</span
+              >
+            }
+          </p>
+        </div>
+      }
+      @case ('media') {
+        <div class="drop">
+          <ui-icon name="music" [size]="32" />
+          <button
+            uiButton="white"
+            type="button"
+            aria-haspopup="dialog"
+            (click)="uploadingMedia.set(true)"
+          >
+            <span i18n="@@media.upload.open">Enviar áudio</span>
+          </button>
+          <p class="hint" i18n="@@addContent.mediaHint">
+            O áudio é transcrito, pode ser dividido em faixas e fica para ouvir
+            na Biblioteca. A transcrição entra no acervo.
+          </p>
+        </div>
+      }
+    }
+
+    @if (way() !== 'media') {
+      <div class="send">
+        <div class="ui-field cap" [class.ui-field--invalid]="capUsd() === null">
+          <label class="ui-field__label" for="add-cap" i18n="@@addContent.cap"
+            >Teto desta inclusão (US$)</label
+          >
+          <input
+            #capInput
+            id="add-cap"
+            class="ui-input big"
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
+            aria-describedby="add-cap-hint"
+            [attr.aria-invalid]="capUsd() === null ? 'true' : null"
+            [value]="capText()"
+            (input)="capText.set(capInput.value)"
+          />
+          <p class="ui-field__hint" id="add-cap-hint">
+            @if (capUsd() === null) {
+              <span class="problem" i18n="@@addContent.capRange"
+                >De 0,05 a 5,00.</span
+              >
+            } @else if (count() > 0) {
+              <span i18n="@@addContent.estimate"
+                >Estimativa: até US$ {{ estimate() }}. Ao chegar ao teto, o
+                resto espera e nada se perde.</span
+              >
+            } @else {
+              <span i18n="@@addContent.capHint"
+                >Ao chegar ao teto, o resto espera e nada se perde.</span
+              >
+            }
+          </p>
+        </div>
+        <button
+          uiButton="primary"
+          type="button"
+          class="include"
+          [disabled]="!canSend()"
+          (click)="include()"
+        >
+          <ui-icon name="plus" [size]="18" />
+          {{ includeLabel() }}
+        </button>
+      </div>
+    }
+
+    @if (sender.sends().length > 0) {
+      <section class="group" aria-labelledby="add-sends-title">
+        <h2 id="add-sends-title" i18n="@@addContent.sending">Enviados agora</h2>
+        <ul class="rows">
+          @for (one of sender.sends(); track one.key) {
+            <li>
+              <app-content-send-row
+                [send]="one"
+                (retried)="sender.retry(one.key)"
+                (removed)="sender.remove(one.key)"
+                (opened)="
+                  openDocument({
+                    topic: one.target.topic,
+                    id: $event.id,
+                    title: $event.title,
+                  })
+                "
+              />
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (uploads.failed()) {
+      <ui-banner
+        tone="warn"
+        title="Sem atualizar agora"
+        i18n-title="@@addContent.staleTitle"
+        role="status"
+      >
+        <span i18n="@@addContent.stale">Tento de novo em instantes.</span>
+      </ui-banner>
+    }
+    <app-document-uploads-section
+      [topic]="topic()"
+      [titles]="titles()"
+      (documentOpened)="openDocument($event)"
+    />
+    <p class="more">
+      <a routerLink="/fila" i18n="@@addContent.toQueue"
+        >Ver tudo na Fila de processamento</a
+      >
+    </p>
+  </div>
+</section>
+
+<app-collection-dialog
+  #collectionDialog
+  [topics]="chat.topicList()"
+  (saved)="collectionMade($event)"
+/>
+
+@if (uploadingMedia()) {
+  <app-upload-panel
+    [topic]="topic()"
+    [topics]="chat.topicList()"
+    (uploaded)="mediaSent()"
+    (closed)="uploadingMedia.set(false)"
+  />
+}

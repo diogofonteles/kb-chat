@@ -1,29 +1,57 @@
+import { formatNumber } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  LOCALE_ID,
   computed,
   inject,
   input,
   output,
 } from '@angular/core';
-import { UiButton, UiIcon, UiPill } from '@ui/index.js';
-import type { OpenedDocument } from './document-upload-dialog.js';
+import {
+  DOCUMENT_BATCH_MAX_USD,
+  type DocumentUpload,
+} from '@kb-chat/contracts';
+import { UiBanner, UiButton, UiIcon, UiIconButton, UiPill } from '@ui/index.js';
 import { DocumentUploadsStore } from './document-uploads-store.js';
-import { FAILURE_TEXTS, STATE_LABELS, WAITING_HINTS } from './upload-labels.js';
+import {
+  FAILURE_TEXTS,
+  STATE_LABELS,
+  WAITING_HINTS,
+  isWorking,
+} from './upload-labels.js';
+
+/** A document opened from the list. */
+export interface OpenedDocument {
+  readonly topic: string;
+  readonly id: string;
+  readonly title: string;
+}
 
 /**
- * "Documentos em processamento" (KBC-149 FR-2), in the Fila de processamento: each sent
- * document or link with its state in words, why it failed, and its link once ready.
+ * "Documentos em processamento" (KBC-149 FR-2), in the Fila de processamento and in
+ * "Adicionar conteúdo" (there, only of the chosen collection): each sent document or link
+ * with its state in words, why it failed or waits, what can be done, and its link once ready.
  */
 @Component({
   selector: 'app-document-uploads-section',
-  imports: [UiButton, UiIcon, UiPill],
+  imports: [UiBanner, UiButton, UiIcon, UiIconButton, UiPill],
   template: `
     @if (rows().length > 0) {
       <section class="group" aria-labelledby="doc-uploads-title">
         <h3 id="doc-uploads-title" i18n="@@docUploads.title">
           Documentos em processamento
         </h3>
+        @if (store.actionError(); as error) {
+          <ui-banner
+            tone="err"
+            title="Não consegui fazer isso"
+            i18n-title="@@docUploads.actionFailed"
+            role="alert"
+          >
+            {{ error }}
+          </ui-banner>
+        }
         <ul class="rows">
           @for (row of rows(); track row.upload.id) {
             <li class="row">
@@ -32,9 +60,13 @@ import { FAILURE_TEXTS, STATE_LABELS, WAITING_HINTS } from './upload-labels.js';
               </span>
               <div class="text">
                 <p class="name">{{ row.upload.name }}</p>
-                <p class="meta">{{ row.topicTitle }}</p>
+                @if (row.topicTitle) {
+                  <p class="meta">{{ row.topicTitle }}</p>
+                }
                 @if (row.failure) {
                   <p class="why">{{ row.failure }}</p>
+                } @else if (row.held) {
+                  <p class="why">{{ row.held }}</p>
                 } @else if (row.hint) {
                   <p class="hint">{{ row.hint }}</p>
                 }
@@ -43,19 +75,57 @@ import { FAILURE_TEXTS, STATE_LABELS, WAITING_HINTS } from './upload-labels.js';
                 }
               </div>
               <ui-pill [tone]="row.tone">{{ row.state }}</ui-pill>
-              @if (
-                row.upload.state === 'ready' && row.upload.document;
-                as doc
-              ) {
-                <button
-                  uiButton="outline"
-                  size="sm"
-                  type="button"
-                  (click)="open(row.upload.topic, doc)"
-                >
-                  <span i18n="@@docUploads.open">Abrir</span>
-                </button>
-              }
+              <div class="actions">
+                @if (
+                  row.upload.state === 'ready' && row.upload.document;
+                  as doc
+                ) {
+                  <button
+                    uiButton="outline"
+                    size="sm"
+                    type="button"
+                    (click)="open(row.upload.topic, doc)"
+                  >
+                    <span i18n="@@docUploads.open">Abrir</span>
+                  </button>
+                }
+                @if (row.canRaise) {
+                  <button
+                    uiButton="outline"
+                    size="sm"
+                    type="button"
+                    [disabled]="store.busyId() !== null"
+                    (click)="store.raise(row.upload)"
+                  >
+                    <span i18n="@@docUploads.raise"
+                      >Aumentar o teto em US$ 0,50</span
+                    >
+                  </button>
+                }
+                @if (row.canRetry) {
+                  <button
+                    uiButton="outline"
+                    size="sm"
+                    type="button"
+                    [disabled]="store.busyId() !== null"
+                    (click)="store.retry(row.upload)"
+                  >
+                    <span i18n="@@docUploads.retry">Tentar de novo</span>
+                  </button>
+                }
+                @if (row.canRemove) {
+                  <button
+                    uiIconButton
+                    type="button"
+                    [size]="44"
+                    [attr.aria-label]="row.removeLabel"
+                    [disabled]="store.busyId() !== null"
+                    (click)="store.remove(row.upload)"
+                  >
+                    <ui-icon name="close" [size]="18" />
+                  </button>
+                }
+              </div>
             </li>
           }
         </ul>
@@ -66,25 +136,53 @@ import { FAILURE_TEXTS, STATE_LABELS, WAITING_HINTS } from './upload-labels.js';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DocumentUploadsSection {
-  private readonly store = inject(DocumentUploadsStore);
+  private readonly locale = inject(LOCALE_ID);
+  protected readonly store = inject(DocumentUploadsStore);
+  /** Only this collection's; null: every one, each with its collection's name. */
+  readonly topic = input<string | null>(null);
   /** Collection names by slug, for the line under each name. */
   readonly titles = input<ReadonlyMap<string, string>>(new Map());
   readonly documentOpened = output<OpenedDocument>();
 
-  protected readonly rows = computed(() =>
-    this.store.items().map((upload) => {
-      const label = STATE_LABELS[upload.state];
-      return {
-        upload,
-        state: label.text(),
-        tone: label.tone,
-        icon: upload.kind === 'file' ? ('file' as const) : ('link' as const),
-        topicTitle: this.titles().get(upload.topic) ?? upload.topic,
-        failure: upload.failure ? FAILURE_TEXTS[upload.failure]() : '',
-        hint: WAITING_HINTS[upload.state]?.() ?? '',
-      };
-    }),
-  );
+  protected readonly rows = computed(() => {
+    const topic = this.topic();
+    return this.store
+      .items()
+      .filter((upload) => topic === null || upload.topic === topic)
+      .map((upload) => this.rowOf(upload, topic === null));
+  });
+
+  private rowOf(upload: DocumentUpload, namesTopic: boolean) {
+    const label = STATE_LABELS[upload.state];
+    return {
+      upload,
+      state: label.text(),
+      tone: label.tone,
+      icon: upload.kind === 'file' ? ('file' as const) : ('link' as const),
+      topicTitle: namesTopic
+        ? (this.titles().get(upload.topic) ?? upload.topic)
+        : '',
+      failure: upload.failure ? FAILURE_TEXTS[upload.failure]() : '',
+      held: this.heldText(upload),
+      hint: WAITING_HINTS[upload.state]?.() ?? '',
+      canRaise:
+        upload.heldBy === 'batch-cap' &&
+        upload.batch !== null &&
+        upload.batch.capUsd < DOCUMENT_BATCH_MAX_USD,
+      canRetry: upload.state === 'failed' && upload.kind !== 'file',
+      canRemove: !isWorking(upload.state),
+      removeLabel: $localize`:@@docUploads.remove:Tirar ${upload.name}:name: da lista`,
+    };
+  }
+
+  private heldText(upload: DocumentUpload): string {
+    if (upload.heldBy === 'month-cap')
+      return $localize`:@@docUploads.heldMonth:O teto de gasto do mês foi atingido. Continua quando o dono aumentar ou o mês virar.`;
+    if (upload.heldBy !== 'batch-cap' || !upload.batch) return '';
+    const cap = formatNumber(upload.batch.capUsd, this.locale, '1.2-2');
+    return $localize`:@@docUploads.heldBatch:O teto desta inclusão (US$ ${cap}:cap:) foi atingido. Aumente para continuar.`;
+  }
+
   protected open(topic: string, doc: { id: string; title: string }): void {
     this.documentOpened.emit({ topic, ...doc });
   }

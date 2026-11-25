@@ -80,9 +80,16 @@ export async function registerDocumentUploads(
       }),
     }),
   );
+  return ingestQueue(app, wiring, { records, files });
+}
+
+function ingestQueue(
+  app: FastifyInstance,
+  wiring: DocumentUploadsWiring,
+  stores: { records: UploadRecords; files: FsDocumentUploadFiles },
+): DocIngestQueue {
   return new DocIngestQueue({
-    records,
-    files,
+    ...stores,
     budgetUsd: () => wiring.documents.kb.budgetUsd(),
     // A collection made on the screen gets its vault folder with its first document (R2).
     collectionOf: (topic) =>

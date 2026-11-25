@@ -26,6 +26,8 @@ const upload = (fields: Partial<DocumentUpload>): DocumentUpload => ({
   bytes: 10,
   received: 10,
   uploadUrl: null,
+  batch: null,
+  heldBy: null,
   createdAt: '2026-11-16T10:00:00.000Z',
   updatedAt: '2026-11-16T10:00:00.000Z',
   ...fields,

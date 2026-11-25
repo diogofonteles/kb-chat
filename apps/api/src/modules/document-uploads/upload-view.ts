@@ -7,19 +7,22 @@ export type MediaProgress = 'transcribing' | 'ready' | 'failed';
 export const uploadUrlOf = (id: string): string =>
   `/api/v1/document-uploads/${id}/upload`;
 
+/** What the view needs besides the record itself. */
+export interface UploadContext {
+  readonly showsDetail: boolean;
+  readonly received: number | null;
+  readonly media: MediaProgress | null;
+  /** The document it became is in the app's catalog now (search, map): "pronto". */
+  readonly arrived: boolean;
+  readonly batch: DocumentBatch | null;
+  /** The spending ceiling that makes it wait, if any (KBC-009 R3). */
+  readonly heldBy: DocumentUpload['heldBy'];
+}
+
 /** The contract's view: the Mac's words only for masters (they may name paths and keys). */
 export function toDocumentUpload(
   record: DocumentUploadRecord,
-  input: {
-    readonly showsDetail: boolean;
-    readonly received: number | null;
-    readonly media: MediaProgress | null;
-    /** The document it became is in the app's catalog now (search, map): "pronto". */
-    readonly arrived: boolean;
-    readonly batch: DocumentBatch | null;
-    /** The spending ceiling that makes it wait, if any (KBC-009 R3). */
-    readonly heldBy: DocumentUpload['heldBy'];
-  },
+  input: UploadContext,
 ): DocumentUpload {
   const fromMedia = mediaStateOf(record, input.media);
   return {
