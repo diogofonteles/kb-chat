@@ -58,6 +58,8 @@ def isolated_mac(tmp_path_factory, monkeypatch):
     """Every test: a HOME of its own, the config under it, and no real Keychain or launchctl."""
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setenv("HOME", str(home))
+    # A test with the API down does not wait for it to come back.
+    monkeypatch.setattr("transcriber.api.UNREACHABLE_WAITS_S", ())
     from transcriber import cli
 
     config = home / "Library" / "Application Support" / "nova-alexandria-transcriber"

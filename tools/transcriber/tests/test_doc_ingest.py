@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from transcriber.api import ApiClient
+from transcriber.api import ApiClient, ApiError
 from transcriber.doc_ingest import (
     LIST_MAX,
     DocIngester,
@@ -480,3 +480,37 @@ def test_kb_map_runs_with_its_converters_and_no_key_in_its_arguments(tmp_path):
     assert command[:7] == ["uv", "run", "--quiet", "--project", command[4], "--extra", "convert"]
     assert command[4].endswith("kb-map")
     assert "sk-secret" not in " ".join(command)
+
+
+def test_what_a_job_says_is_said_again_once_the_api_is_back(monkeypatch):
+    """The API restarting (a deploy) must not cost the minutes a job took."""
+    from transcriber import api as api_module
+
+    api = ApiClient("http://localhost:1", lambda: "t" * 40, "mac")
+    waited, answers = [], [ApiError("refused"), ApiError("refused"), (204, b"")]
+
+    def post(path, body):
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(api, "_post", post)
+    monkeypatch.setattr(api_module.time, "sleep", waited.append)
+    monkeypatch.setattr(api_module, "UNREACHABLE_WAITS_S", (2, 5))
+    assert api._on_job({"id": "j", "leaseId": "l"}, "doc-result", {})
+    assert waited == [2, 5]
+
+
+def test_an_answer_is_never_said_again(monkeypatch):
+    api = ApiClient("http://localhost:1", lambda: "t" * 40, "mac")
+    calls = []
+
+    def post(path, body):
+        calls.append(path)
+        raise ApiError("doc-result answered 400", 400)
+
+    monkeypatch.setattr(api, "_post", post)
+    with pytest.raises(ApiError):
+        api._on_job({"id": "j", "leaseId": "l"}, "doc-result", {})
+    assert len(calls) == 1

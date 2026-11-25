@@ -1,8 +1,10 @@
 """The worker protocol over HTTPS (ADR 0022 §3, ADR 0023): the token, never a session."""
 
 import json
+import logging
 import shutil
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -35,6 +37,10 @@ def _why(answer: bytes) -> str:
         return ""
     return f": {str(message)[:300]}"
 
+
+# Waits before saying again what the API was not there to hear (under a lease's 10 min).
+UNREACHABLE_WAITS_S = (2, 5, 10, 20, 40)
+log = logging.getLogger("transcriber")
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
@@ -256,12 +262,26 @@ class ApiClient:
     def _on_job(self, job: dict, action: str, body: dict) -> bool:
         """True on 204; False when the lease is no longer ours (409)."""
         payload = {"worker": self.worker, "leaseId": job["leaseId"], **body}
-        status, answer = self._post(f"/api/v1/media-worker/jobs/{job['id']}/{action}", payload)
+        path = f"/api/v1/media-worker/jobs/{job['id']}/{action}"
+        status, answer = self._post_once_reachable(path, payload)
         if status == 204:
             return True
         if status == 409:
             return False
         raise ApiError(f"{action} answered {status}{_why(answer)}", status)
+
+    def _post_once_reachable(self, path: str, body: dict) -> tuple[int, bytes]:
+        """The API restarting (a deploy) must not cost the minutes a job took: what a job
+        says is said again for a while. Answered twice, the second says the lease is gone."""
+        for wait in (*UNREACHABLE_WAITS_S, None):
+            try:
+                return self._post(path, body)
+            except ApiError as err:
+                if err.status is not None or wait is None:
+                    raise
+                log.warning("the API is unreachable, again in %d s: %s", wait, err)
+                time.sleep(wait)
+        raise AssertionError("unreachable")
 
     def _post(self, path: str, body: dict) -> tuple[int, bytes]:
         # NaN is not JSON: the API would refuse the whole result (json_safe turns it to None).

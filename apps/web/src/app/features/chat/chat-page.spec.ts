@@ -473,7 +473,7 @@ describe('ChatPage default collection', () => {
       );
     await view.fixture.whenStable();
     expect(document.querySelector('.page-announcement')?.textContent).toMatch(
-      /Muitas buscas/,
+      /Muitos pedidos/,
     );
   });
 });

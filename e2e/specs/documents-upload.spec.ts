@@ -238,11 +238,29 @@ test('KBC-185: the web is searched here, what is picked has its estimate and ent
   await add.getByRole('button', { name: 'Pesquisar na web' }).click();
   await add.getByLabel('Assunto').fill(subject);
   await add.getByLabel('Quantidade de fontes').fill('6');
-  await add.getByLabel('Autores de referência (opcional)').fill('Hermes');
+  await add
+    .getByLabel('Autores de referência (opcional)')
+    .fill('Hermes, Manly Hall');
   await add.getByRole('button', { name: 'Pesquisar', exact: true }).click();
   const all = add.getByRole('checkbox', { name: 'Selecionar todos' });
   await expect(all).toBeChecked();
+  // Two names typed at once are two authors.
+  await expect(
+    add.getByRole('list', { name: 'Autores incluídos' }).getByRole('listitem'),
+  ).toHaveCount(2);
+  const boxes = add
+    .getByRole('group', { name: /^Resultados para/ })
+    .getByRole('listitem');
+  await expect(boxes).toHaveCount(6);
   await page.screenshot({ path: testInfo.outputPath('search-found.png') });
+
+  // More, as many as asked, added to what is there, and none repeated.
+  await add.getByRole('button', { name: 'Buscar mais 6' }).click();
+  await expect(boxes).toHaveCount(12);
+  const links = await boxes
+    .getByRole('link')
+    .evaluateAll((all) => all.map((one) => (one as HTMLAnchorElement).href));
+  expect(new Set(links).size).toBe(12);
 
   // Two of them, a text and a video: the estimate follows what is picked.
   await all.click();
