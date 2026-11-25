@@ -34,6 +34,7 @@ import {
 } from '../test/leakage-probe.js';
 import {
   HIDDEN_AUDIO,
+  HIDDEN_ORIGINAL_SHA,
   HIDDEN_SHA,
   MARK,
   OPEN_DOC_IDS,
@@ -170,6 +171,21 @@ const BODIES_HERE: Readonly<Record<string, readonly object[]>> = {
   ],
 };
 
+const WRITE_BODIES: Readonly<Record<string, readonly object[]>> = {
+  ...BODIES_HERE,
+  // A refinement the drawing cannot meet: a web link without credentials (KBC-149).
+  'POST /api/v1/topics/:topic/documents': [
+    { kind: 'url', url: 'https://example.org/zqx-ana', level: 'ci' },
+    {
+      kind: 'file',
+      name: 'x.pdf',
+      bytes: 1,
+      sha256: HIDDEN_ORIGINAL_SHA,
+      level: 'ci',
+    },
+  ],
+};
+
 /** A person's requests; a write carries an If-Match, so version checks are reached too. */
 const sender =
   (app: FastifyInstance, headers: Record<string, string>): Send =>
@@ -236,7 +252,7 @@ beforeAll(async () => {
   );
   const writes = routes
     .filter((one) => !isRead(one.route))
-    .flatMap((one) => requestsOf(one, candidates, BODIES_HERE));
+    .flatMap((one) => requestsOf(one, candidates, WRITE_BODIES));
   anaWrites = await exchange(sender(app, sentinel.ana.headers), writes, llm);
   ana.push(...anaWrites);
 }, 120_000);

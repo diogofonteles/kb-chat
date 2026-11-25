@@ -6,7 +6,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { KbPublishJob, MediaItem } from '@kb-chat/contracts';
 import { GRANTABLE_FEATURES } from '@kb-chat/contracts';
@@ -60,6 +60,8 @@ export const SECRET = 'qvk';
 export const SECRETS = [
   'qvkraiztitulo',
   'qvkraizcorpo',
+  'qvkoriginalnome',
+  'qvkoriginal',
   'qvkaulatitulo',
   'qvkaulacorpo',
   'qvkconceito',
@@ -74,9 +76,36 @@ export const SECRETS = [
   'qvkresumo',
 ] as const;
 
+/** A kept original ("Ver original", KBC-148): its bytes and the keys that name it. */
+interface KeptOriginal {
+  readonly name: string;
+  readonly bytes: Buffer;
+  readonly sha256: string;
+}
+const originalNamed = (name: string, text: string): KeptOriginal => {
+  const bytes = Buffer.from(text);
+  return {
+    name,
+    bytes,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+  };
+};
+const OPEN_ORIGINAL = originalNamed('tabua.txt', 'A lua da tábua original.');
+const HIDDEN_ORIGINAL = originalNamed(
+  'Zqxoriginal Qvkoriginalnome.txt',
+  'A lua no zqxoriginal velado qvkoriginal.',
+);
+/** Who holds the hidden file may send it: the answer names nothing (KBC-149 BR-3). */
+export const HIDDEN_ORIGINAL_SHA = HIDDEN_ORIGINAL.sha256;
+const keysOf = ({ name, sha256 }: KeptOriginal): string =>
+  `original_sha256: ${sha256}\noriginal_name: "${name}"`;
+
 /** Visible to Ana: a copy group's open member and a text linking to a hidden concept. */
 const BRIDGES = [
-  doc('hermetismo/raw/tabua.md', 'Tábua de Esmeralda', 'A lua da tábua.'),
+  doc('hermetismo/raw/tabua.md', 'Tábua de Esmeralda', {
+    body: 'A lua da tábua.',
+    extra: keysOf(OPEN_ORIGINAL),
+  }),
   doc('hermetismo/raw/ligado.md', 'Texto Ligado', {
     body: 'A lua do meio, ligada.',
     extra: 'related: ["[[Zqxconceito]]", "[[Lua Primeira Aberta]]"]',
@@ -91,11 +120,10 @@ const RHYTHM = doc('hermetismo/wiki/concepts/Ritmo.md', 'Ritmo', 'O ritmo.');
 
 /** At CDC: a text at the root and one in the sub-collection, a concept and a copy. */
 const SENTINELS = [
-  doc(
-    'hermetismo/raw/zqx-raiz.md',
-    'Zqxraiz Velado Qvkraiztitulo',
-    'A lua no zqxcorpo da raiz qvkraizcorpo.',
-  ),
+  doc('hermetismo/raw/zqx-raiz.md', 'Zqxraiz Velado Qvkraiztitulo', {
+    body: 'A lua no zqxcorpo da raiz qvkraizcorpo.',
+    extra: keysOf(HIDDEN_ORIGINAL),
+  }),
   doc(
     'hermetismo/aulas/raw/zqx-aula.md',
     'Zqxaula Velada Qvkaulatitulo',
@@ -327,6 +355,17 @@ interface WorldOptions {
   readonly routes?: StartOptions['routes'];
 }
 
+/** `raw/_originals/<sha256>.txt`, as kb-map convert keeps them (ADR 0040 §2). */
+async function keepOriginals(
+  vault: string,
+  originals: readonly KeptOriginal[],
+): Promise<void> {
+  const folder = join(vault, 'hermetismo', 'raw', '_originals');
+  await mkdir(folder, { recursive: true });
+  for (const { sha256, bytes } of originals)
+    await writeFile(join(folder, `${sha256}.txt`), bytes);
+}
+
 /** The documents placed on the scale, and Ana at CI with every member feature. */
 async function scaledDocuments(options: WorldOptions) {
   const docs = [
@@ -340,6 +379,10 @@ async function scaledDocuments(options: WorldOptions) {
     ...(options.llm && { llm: options.llm }),
     ...(options.routes && { routes: options.routes }),
   });
+  await keepOriginals(world.vault, [
+    OPEN_ORIGINAL,
+    ...(options.sentinels ? [HIDDEN_ORIGINAL] : []),
+  ]);
   const ana = await memberOf(world, 'ana@example.com', {
     topics: ['hermetismo'],
     features: [...ANA_FEATURES],
