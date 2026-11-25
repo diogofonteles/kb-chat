@@ -25,7 +25,9 @@ class Site:
         for one, where in self.moved.items():
             found = re.fullmatch(one, path)
             if found:
-                return found.expand(where)
+                secret = query.get("h", "")
+                kept = f"?h={secret}" if "?" not in where and re.fullmatch(r"\w+", secret) else ""
+                return found.expand(where) + kept
         for one, names in self.asked.items():
             for name, value in names.items():
                 if re.fullmatch(one, path) and re.fullmatch(value, query.get(name, "")):
@@ -71,11 +73,16 @@ SITES = (
         frozenset({"soundcloud.com", "m.soundcloud.com"}),
         (rf"{PART}/sets{PART}({PART})?", rf"{PART}/(?!sets$)[^/]+({PART})?"),
     ),
-    Site(frozenset({"api.soundcloud.com", "api-v2.soundcloud.com"}), (r"/tracks/\d+",)),
+    Site(
+        frozenset({"api.soundcloud.com", "api-v2.soundcloud.com"}),
+        (r"/tracks/\d+",),
+        # A private track of a set.
+        {r"/tracks/\d+": {"secret_token": ID}},
+    ),
     Site(
         frozenset({"podcasts.apple.com"}),
         (),
-        {rf"(/[a-z]{{2}})?/podcast({PART}){{1,2}}": {"i": r"\d+"}},
+        {rf"(/[A-Za-z]{{2}})?/podcast({PART}){{1,2}}": {"i": r"\d+"}},
     ),
     Site(frozenset({"archive.org"}), (r"/(details|embed)/[^/@].*",)),
 )
@@ -95,7 +102,8 @@ def _read(url: str) -> tuple[str, str, dict[str, str]]:
         return "", "", {}
     if parts.scheme not in ("http", "https"):
         return "", "", {}
-    query = dict(urllib.parse.parse_qsl(parts.query))
+    # Said twice, the first is the one, as the app reads it.
+    query = dict(reversed(urllib.parse.parse_qsl(parts.query)))
     return parts.hostname or "", parts.path.rstrip("/"), query
 
 

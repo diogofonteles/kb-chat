@@ -17,6 +17,8 @@ from transcriber.known_links import is_short, known_address
         # Vimeo's own pages ask for an account; its player does not.
         ("https://vimeo.com/123", "https://player.vimeo.com/video/123"),
         ("https://vimeo.com/123/abc", "https://player.vimeo.com/video/123?h=abc"),
+        ("https://vimeo.com/123?h=ab1&x=2", "https://player.vimeo.com/video/123?h=ab1"),
+        ("https://vimeo.com/123/abc?h=def", "https://player.vimeo.com/video/123?h=abc"),
         ("https://vimeo.com/channels/x/123", "https://player.vimeo.com/video/123"),
         ("https://vimeo.com/groups/x/videos/123", "https://player.vimeo.com/video/123"),
         ("https://player.vimeo.com/video/3?h=a&b=c", "https://player.vimeo.com/video/3?h=a"),
@@ -32,6 +34,15 @@ from transcriber.known_links import is_short, known_address
             "https://podcasts.apple.com/br/podcast/x/id1?i=2",
         ),
         ("http://archive.org/details/x/1.mp3", "https://archive.org/details/x/1.mp3"),
+        (
+            "https://podcasts.apple.com/BR/podcast/x/id1?i=2",
+            "https://podcasts.apple.com/BR/podcast/x/id1?i=2",
+        ),
+        (
+            "https://api-v2.soundcloud.com/tracks/1?secret_token=s-Ab1&x=2",
+            "https://api-v2.soundcloud.com/tracks/1?secret_token=s-Ab1",
+        ),
+        ("https://www.youtube.com/watch?v=a&v=b", "https://www.youtube.com/watch?v=a"),
         # The port and the name before the host go nowhere.
         ("http://eu:eu@youtu.be:8080/ab", "https://youtu.be/ab"),
     ],
