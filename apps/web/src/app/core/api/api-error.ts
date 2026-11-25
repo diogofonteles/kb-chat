@@ -89,7 +89,7 @@ export function errorDetailsOf(err: unknown): unknown {
 
 const MESSAGES: Record<UiErrorCode, () => string> = {
   OFFLINE: () =>
-    $localize`:@@error.offline:Não consegui falar com o servidor de busca. Verifique se ele está rodando (pnpm dev:api).`,
+    $localize`:@@error.offline:Não consegui falar com o servidor. Verifique sua internet e tente de novo.`,
   SEARCH_UNAVAILABLE: () =>
     $localize`:@@error.searchUnavailable:A busca está indisponível agora. Tente de novo em instantes.`,
   INDEX_MISSING: () =>
@@ -111,7 +111,7 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
   ANSWER_IN_PROGRESS: () =>
     $localize`:@@error.answerInProgress:Esta resposta ainda está sendo escrita.`,
   RATE_LIMITED: () =>
-    $localize`:@@error.rateLimited:Muitas buscas em pouco tempo. Espere um instante e tente de novo.`,
+    $localize`:@@error.rateLimited:Muitos pedidos em pouco tempo. Espere um instante e tente de novo.`,
   FORBIDDEN_HOST: () =>
     $localize`:@@error.forbiddenHost:Acesso recusado pelo servidor.`,
   UNAUTHENTICATED: () =>
@@ -149,11 +149,15 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
   MEDIA_NOT_READY: () =>
     $localize`:@@error.mediaNotReady:Esta mídia ainda não está pronta para tocar.`,
   PAYLOAD_TOO_LARGE: () =>
-    $localize`:@@error.payloadTooLarge:O arquivo é maior do que o permitido. Envie um áudio de até 4 GB.`,
+    $localize`:@@error.payloadTooLarge:O arquivo é maior do que o permitido.`,
   MEDIA_CONFLICT: () =>
     $localize`:@@error.mediaConflict:Esta mídia mudou enquanto você agia. Atualize a lista e tente de novo.`,
+  DOCUMENT_DUPLICATE: () =>
+    $localize`:@@error.documentDuplicate:O mesmo documento já está no acervo, ou a caminho dele. Este pode ficar de fora.`,
   MEDIA_DUPLICATE: () =>
     $localize`:@@error.mediaDuplicate:Este arquivo já está no acervo.`,
+  STORAGE_FULL: () =>
+    $localize`:@@error.storageFull:Não há espaço para guardar o arquivo agora. Fale com o dono.`,
   MEDIA_QUOTA_EXCEEDED: () =>
     $localize`:@@error.mediaQuota:Este envio passa da sua cota. Fale com um master para aumentar.`,
   MEDIA_UPLOAD_EXPIRED: () =>
@@ -200,8 +204,7 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.levelCodeTaken:Já existe um nível com esse código.`,
   LEVELS_PENDING: () =>
     $localize`:@@error.levelsPending:Este acervo tem níveis de acesso: isto ainda não está disponível para você nele.`,
-  LEVEL_REQUIRED: () =>
-    $localize`:@@error.levelRequired:Escolha o nível deste áudio.`,
+  LEVEL_REQUIRED: () => $localize`:@@error.levelRequired:Escolha o nível.`,
   LEVEL_ABOVE_YOURS: () =>
     $localize`:@@error.levelAboveYours:Este nível está acima do seu. Escolha o seu ou um abaixo.`,
   LEVEL_BELOW_RECORDING: () =>
@@ -210,6 +213,14 @@ const MESSAGES: Record<UiErrorCode, () => string> = {
     $localize`:@@error.editAboveYourLevel:Esta gravação tem faixas acima do seu nível. Só quem tem todos os níveis dela pode editá-la.`,
   LEVELS_CHANGED: () =>
     $localize`:@@error.levelsChanged:A escala mudou. Confira de novo.`,
+  WEB_SEARCH_NOT_CONNECTED: () =>
+    $localize`:@@error.webSearchNotConnected:A pesquisa na web não está ligada.`,
+  WEB_SEARCH_KEY_REJECTED: () =>
+    $localize`:@@error.webSearchKeyRejected:O Firecrawl não aceitou esta chave. Nada foi salvo.`,
+  WEB_SEARCH_NO_CREDITS: () =>
+    $localize`:@@error.webSearchNoCredits:Os créditos da pesquisa na web acabaram.`,
+  WEB_SEARCH_UNAVAILABLE: () =>
+    $localize`:@@error.webSearchUnavailable:Não consegui falar com o Firecrawl. Tente de novo em instantes.`,
   INTERNAL: () =>
     $localize`:@@error.internal:Algo deu errado do nosso lado. Tente de novo.`,
 };

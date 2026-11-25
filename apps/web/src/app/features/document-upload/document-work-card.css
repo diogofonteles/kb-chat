@@ -1,0 +1,75 @@
+:host {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--overlay-2);
+}
+
+p,
+dl,
+dd {
+  margin: 0;
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
+  align-items: baseline;
+}
+
+.count {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.parts,
+.line,
+dt {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.mac {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+
+.mac ui-pill {
+  flex: none;
+}
+
+.line {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.line a {
+  display: inline-block;
+  padding: var(--space-2) 0;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+dl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+
+.fact {
+  min-width: 0;
+}
+
+.wide {
+  flex: 1 1 100%;
+}
+
+dd {
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}

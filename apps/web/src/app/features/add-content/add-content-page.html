@@ -1,0 +1,462 @@
+<section class="page" aria-labelledby="add-content-title">
+  <header class="head">
+    <a
+      class="back"
+      routerLink="/"
+      aria-label="Voltar"
+      i18n-aria-label="@@addContent.back"
+    >
+      <ui-icon name="chevLeft" [size]="26" />
+    </a>
+    <div class="head-text">
+      <h1
+        id="add-content-title"
+        #heading
+        class="heading"
+        tabindex="-1"
+        i18n="@@addContent.title"
+      >
+        Adicionar conteúdo
+      </h1>
+      <p class="sub" i18n="@@addContent.subtitle">
+        Documentos, páginas da web, áudios e vídeos entram no acervo e passam a
+        responder na busca e na Pesquisa com IA.
+      </p>
+    </div>
+  </header>
+
+  <div class="body">
+    <div class="where">
+      <div class="ui-field">
+        <label class="ui-field__label" for="add-topic" i18n="@@addContent.topic"
+          >Acervo</label
+        >
+        <select
+          #topicSelect
+          id="add-topic"
+          class="ui-input big"
+          [value]="topic()"
+          (change)="chooseTopic(topicSelect.value)"
+        >
+          @for (option of topics(); track option.slug) {
+            <option [value]="option.slug" [selected]="option.slug === topic()">
+              {{ treeTitle(option) }}
+            </option>
+          }
+        </select>
+      </div>
+      @if (canCreateCollections()) {
+        <button
+          uiButton="outline"
+          type="button"
+          class="new-collection"
+          (click)="collectionDialog.openNew()"
+        >
+          <ui-icon name="plus" [size]="18" />
+          <span i18n="@@library.newCollection">Novo acervo</span>
+        </button>
+      }
+    </div>
+
+    @if (askedMissing()) {
+      <ui-banner
+        tone="info"
+        title="Não achei o acervo do endereço"
+        i18n-title="@@addContent.askedMissing"
+        role="status"
+      >
+        <span i18n="@@addContent.askedMissingText"
+          >Ele não existe ou você não tem acesso. Escolha outro acima.</span
+        >
+      </ui-banner>
+    }
+    @if (levels.shown()) {
+      <app-level-field
+        [choices]="levels.levels()"
+        [label]="levelLabel"
+        [loading]="levels.loading()"
+        [failed]="levels.failed()"
+        [retrying]="levels.retrying()"
+        [invalid]="levelInvalid()"
+        of="content"
+        [(level)]="level"
+        (retried)="levels.reload()"
+      />
+    }
+
+    <div
+      class="ways"
+      role="group"
+      aria-label="O que adicionar"
+      i18n-aria-label="@@addContent.what"
+    >
+      @for (one of ways; track one.way) {
+        <button
+          uiChip
+          type="button"
+          class="way"
+          [selected]="way() === one.way"
+          (click)="choose(one.way)"
+        >
+          <ui-icon [name]="one.icon" [size]="18" />
+          {{ one.label }}
+        </button>
+      }
+    </div>
+
+    @switch (way()) {
+      @case ('files') {
+        <div
+          class="drop"
+          [class.over]="dragging()"
+          (dragover)="$event.preventDefault(); dragging.set(true)"
+          (dragleave)="dragging.set(false)"
+          (drop)="dropped($event)"
+        >
+          <ui-icon name="upload" [size]="32" />
+          <div class="pick">
+            <button
+              #chooseFiles
+              uiButton="white"
+              type="button"
+              (click)="fileInput.click()"
+            >
+              <span i18n="@@addContent.choose">Escolher arquivos</span>
+            </button>
+            @if (picksFolder) {
+              <button
+                uiButton="outline"
+                type="button"
+                (click)="folderInput.click()"
+              >
+                <ui-icon name="folder" [size]="18" />
+                <span i18n="@@addContent.chooseFolder">Escolher pasta</span>
+              </button>
+            }
+          </div>
+          <p class="hint" i18n="@@addContent.fileTypes">
+            PDF (também escaneado), Word, PowerPoint, Excel, EPUB, TXT,
+            Markdown, imagem, CSV, JSON, áudio e vídeo (entra a transcrição). De
+            uma pasta, entra tudo, também das subpastas; o que não puder entrar
+            aparece com o motivo.
+          </p>
+          <p class="status" role="status">
+            @if (reading()) {
+              <span i18n="@@addContent.reading">Lendo a pasta…</span>
+            }
+          </p>
+          <input
+            #fileInput
+            class="visually-hidden"
+            type="file"
+            multiple
+            [accept]="accept"
+            tabindex="-1"
+            aria-hidden="true"
+            (change)="filesChosen($event)"
+          />
+          <input
+            #folderInput
+            class="visually-hidden folder-input"
+            type="file"
+            multiple
+            webkitdirectory
+            tabindex="-1"
+            aria-hidden="true"
+            (change)="filesChosen($event)"
+          />
+        </div>
+        @if (readFailed()) {
+          <ui-banner
+            tone="err"
+            title="Não consegui ler a pasta inteira"
+            i18n-title="@@addContent.readFailedTitle"
+            role="alert"
+          >
+            <span i18n="@@addContent.readFailed"
+              >Nada dela foi incluído. Tente de novo, ou use Escolher
+              pasta.</span
+            >
+          </ui-banner>
+        }
+        @if (emptyDrop()) {
+          <ui-banner
+            tone="info"
+            title="A pasta não tem arquivos"
+            i18n-title="@@addContent.emptyDrop"
+            role="status"
+          />
+        }
+        @if (files().length > 0) {
+          <div class="found">
+            <p #foundText class="found-text" role="status" tabindex="-1">
+              <strong i18n="@@addContent.found">{files().length, plural,
+                =1 {1 arquivo encontrado}
+                other {{{ files().length }} arquivos encontrados}
+              }</strong>
+              <span>{{ foundParts() }}</span>
+            </p>
+            <button
+              uiButton="ghost"
+              size="sm"
+              type="button"
+              class="tall"
+              (click)="clearFiles()"
+            >
+              <span i18n="@@addContent.clear">Limpar</span>
+            </button>
+          </div>
+          @if (left().length > 0) {
+            <details class="left" [open]="left().length <= 5">
+              <summary i18n="@@addContent.leftTitle">
+                Não entram ({{ left().length }})
+              </summary>
+              <ul class="rows">
+                @for (one of left(); track one.key) {
+                  <li class="row">
+                    <div class="row-text">
+                      <p class="name">{{ one.path }}</p>
+                      <p class="problem">{{ one.problem }}</p>
+                    </div>
+                  </li>
+                }
+              </ul>
+            </details>
+          }
+          @if (going().length > 0) {
+            <details class="left" [open]="going().length <= 12">
+              <summary i18n="@@addContent.goingTitle">
+                Vão entrar ({{ going().length }})
+              </summary>
+              <ul
+                class="rows"
+                aria-label="Arquivos escolhidos"
+                i18n-aria-label="@@addContent.chosen"
+              >
+                @for (one of going(); track one.key) {
+                  <li class="row">
+                    <ui-icon
+                      [name]="one.role === 'document' ? 'file' : 'music'"
+                      [size]="20"
+                    />
+                    <div class="row-text">
+                      <p class="name">{{ one.path }}</p>
+                    </div>
+                    <button
+                      uiIconButton
+                      type="button"
+                      [size]="44"
+                      [attr.aria-label]="removeLabel(one.path)"
+                      (click)="removeFile(one.key)"
+                    >
+                      <ui-icon name="close" [size]="18" />
+                    </button>
+                  </li>
+                }
+              </ul>
+            </details>
+          }
+        }
+      }
+      @case ('links') {
+        <div class="ui-field">
+          <label
+            class="ui-field__label"
+            for="add-links"
+            i18n="@@addContent.links"
+            >Endereços</label
+          >
+          <textarea
+            #linksInput
+            id="add-links"
+            class="ui-input big links"
+            rows="5"
+            inputmode="url"
+            autocapitalize="off"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="https://"
+            aria-describedby="add-links-hint add-links-count"
+            [value]="text()"
+            (input)="text.set(linksInput.value)"
+          ></textarea>
+          <p
+            class="ui-field__hint"
+            id="add-links-hint"
+            i18n="@@addContent.linksHint"
+          >
+            Um por linha. Uma página vira texto; um vídeo ou áudio (YouTube,
+            Vimeo, Instagram, Facebook, SoundCloud, podcast) é transcrito e
+            entra como gravação. De um canal ou playlist, você escolhe o que
+            entra.
+          </p>
+          <p class="count" id="add-links-count" role="status">
+            @if (parsed().links.length > 0) {
+              <span
+                i18n="@@addContent.linkCount"
+                >{parsed().links.length, plural,
+                  =1 {1 endereço pronto}
+                  other {{{ parsed().links.length }} endereços prontos}
+                }</span
+              >
+            }
+            @if (parsed().refused.length > 0) {
+              <span class="problem" i18n="@@addContent.linkRefused"
+                >Não é um endereço: {{ parsed().refused.join(', ') }}</span
+              >
+            }
+          </p>
+        </div>
+      }
+      @case ('search') {
+        <app-web-search-section [topic]="topic()" />
+      }
+      @case ('media') {
+        <div class="drop">
+          <ui-icon name="music" [size]="32" />
+          <button
+            uiButton="white"
+            type="button"
+            aria-haspopup="dialog"
+            (click)="uploadingMedia.set(true)"
+          >
+            <span i18n="@@media.upload.open">Enviar áudio</span>
+          </button>
+          <p class="hint" i18n="@@addContent.mediaHint">
+            O áudio é transcrito, pode ser dividido em faixas e fica para ouvir
+            na Biblioteca. De um vídeo entra só o som. A transcrição entra no
+            acervo.
+          </p>
+        </div>
+      }
+    }
+
+    @if (way() !== 'media') {
+      @if (count() > 0) {
+        <app-content-estimate [counts]="counts()" />
+      }
+      <div class="send">
+        <div class="ui-field cap" [class.ui-field--invalid]="capUsd() === null">
+          <label class="ui-field__label" for="add-cap" i18n="@@addContent.cap"
+            >Teto desta inclusão (US$)</label
+          >
+          <input
+            #capInput
+            id="add-cap"
+            class="ui-input big"
+            type="text"
+            inputmode="decimal"
+            autocomplete="off"
+            aria-describedby="add-cap-hint"
+            [attr.aria-invalid]="capUsd() === null ? 'true' : null"
+            [value]="capText()"
+            (input)="capText.set(capInput.value)"
+          />
+          <p class="ui-field__hint" id="add-cap-hint">
+            @if (capUsd() === null) {
+              <span class="problem" i18n="@@addContent.capRange"
+                >De {{ minCap }} a {{ maxCap }}.</span
+              >
+            } @else {
+              <span i18n="@@addContent.capHint"
+                >Ao chegar ao teto, o resto espera e nada se perde.</span
+              >
+            }
+          </p>
+        </div>
+        @if (overCap()) {
+          <ui-banner
+            class="over"
+            tone="warn"
+            title="A estimativa passa do teto"
+            i18n-title="@@addContent.overCapTitle"
+          >
+            @if (!overMax() || capText() !== maxCap) {
+              <button
+                uiBannerAction
+                uiButton="white"
+                size="sm"
+                type="button"
+                class="tall"
+                (click)="useEnoughCap()"
+              >
+                <span i18n="@@addContent.useCap"
+                  >Usar US$ {{ enoughCap() }}</span
+                >
+              </button>
+            }
+            @if (overMax()) {
+              <span i18n="@@addContent.overMax"
+                >O máximo por inclusão é US$ {{ maxCap }}: o resto espera, e
+                você aumenta na lista.</span
+              >
+            } @else {
+              <span i18n="@@addContent.overCap"
+                >Com US$ {{ capText() }} parte vai esperar até você
+                aumentar.</span
+              >
+            }
+          </ui-banner>
+        }
+      </div>
+      <div class="go" [class.stuck]="count() > 0">
+        @if (count() > 0) {
+          <p class="go-text">{{ goText() }}</p>
+        }
+        <button
+          uiButton="primary"
+          type="button"
+          class="include"
+          [attr.aria-disabled]="canSend() ? null : 'true'"
+          (click)="include()"
+        >
+          <ui-icon name="plus" [size]="18" />
+          {{ includeLabel() }}
+        </button>
+      </div>
+    }
+
+    <app-content-sends
+      [titles]="titles()"
+      (opened)="openDocument($event)"
+      (cleared)="focusHeading()"
+    />
+
+    @if (uploads.failed()) {
+      <ui-banner
+        tone="warn"
+        title="Sem atualizar agora"
+        i18n-title="@@addContent.staleTitle"
+        role="status"
+      >
+        <span i18n="@@addContent.stale">Tento de novo em instantes.</span>
+      </ui-banner>
+    }
+    <app-document-uploads-section
+      [topic]="topic()"
+      [titles]="titles()"
+      (documentOpened)="openDocument($event)"
+      (listEnded)="focusHeading()"
+    />
+    <p class="more">
+      <a routerLink="/fila" i18n="@@addContent.toQueue"
+        >Ver tudo na Fila de processamento</a
+      >
+    </p>
+  </div>
+</section>
+
+<app-collection-dialog
+  #collectionDialog
+  [topics]="chat.topicList()"
+  (saved)="collectionMade($event)"
+/>
+
+@if (uploadingMedia()) {
+  <app-upload-panel
+    [topic]="topic()"
+    [topics]="chat.topicList()"
+    (uploaded)="mediaSent()"
+    (closed)="uploadingMedia.set(false)"
+  />
+}

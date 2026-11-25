@@ -1,0 +1,372 @@
+/* "Pesquisar na web" (KBC-185): the form, then rows to pick, the action stuck to the foot. */
+:host {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* At least 16 px: a phone's browser zooms in on a smaller field. */
+.big {
+  font-size: 1rem;
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.legend-label {
+  margin-bottom: 0.375rem;
+  padding: 0;
+}
+
+.kinds,
+.authors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.kinds {
+  min-height: 2.75rem;
+}
+
+.authors {
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.authors li {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.author {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.author-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.author ui-icon {
+  flex: none;
+}
+
+.author-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+
+.send {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.go,
+.add {
+  min-height: 2.75rem;
+}
+
+.calls {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.status,
+.none,
+.row p {
+  margin: 0;
+}
+
+.status {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Empty, the live region stays in the page (so what it says next is announced) and takes
+   no room (UP-21). */
+.status.empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.results {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.legend {
+  padding: 0;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.all {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-3);
+  min-height: var(--target-desktop);
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+/* Some picked, not all: a dash (never the look of none). */
+.all .ui-check:indeterminate {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.all .ui-check:indeterminate::after {
+  content: '';
+  width: 0.5rem;
+  height: 2px;
+  background: var(--color-on-accent);
+}
+
+.rows {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-menu);
+}
+
+.row:not(.there):hover {
+  background: var(--overlay-2);
+}
+
+.row > .ui-check {
+  margin-top: 0.1875rem;
+}
+
+.row:has(> .ui-check:focus-visible) {
+  background: var(--overlay-2);
+}
+
+.text {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--text-item);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+/* The whole row picks it: the label stretched over the row, its links above the label. */
+.row:not(.there) .title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.there .title {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+.about {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.there-words {
+  display: inline-flex;
+  vertical-align: bottom;
+  align-items: center;
+  gap: var(--space-1);
+  margin-right: var(--space-2);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.action {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  max-width: 100%;
+  min-height: 1.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-meta);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.action ui-icon {
+  flex: none;
+}
+
+.site,
+.by {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.by {
+  color: var(--color-text-muted);
+  font-size: var(--text-meta);
+}
+
+.none {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.banner-link {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.skeleton {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2);
+}
+
+.skeleton span {
+  width: 60%;
+  height: 0.875rem;
+  border-radius: 6px;
+  background: var(--overlay-3);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton span + span {
+  width: 90%;
+  height: 0.75rem;
+  background: var(--overlay-2);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton span {
+    animation: none;
+  }
+}
+
+/* A phone: every control 44 tall, the action as wide as the page. */
+@media (max-width: 1023px) {
+  .kind,
+  .author,
+  .all,
+  .action,
+  .retry,
+  .banner-link {
+    min-height: var(--target);
+  }
+
+  .banner-link {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .go {
+    width: 100%;
+  }
+}
+
+@media (max-width: 479px) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* After the results: what was left out, and more of the same. */
+.foot {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.more {
+  min-height: 2.75rem;
+}
+
+/* How far the search got: in sight while its results come in under it. */
+.progress {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.progress.stuck {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: var(--space-2) 0;
+  background: var(--color-bg);
+}
+
+.progress ui-progress {
+  width: 100%;
+}

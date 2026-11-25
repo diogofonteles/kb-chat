@@ -199,7 +199,7 @@ export interface MediaDocumentStorePort {
     readonly topic?: string;
   }): LeasedKbJob | null;
   /** Whether this worker holds a kb-publish lease now. */
-  holds(worker: string): boolean;
+  holds(worker: string, now: Date): boolean;
   /** Keeps what a lease delivered, for its result. */
   deliver(
     owner: LeaseOwner,

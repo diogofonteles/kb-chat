@@ -6,7 +6,10 @@ import type {
   SeeAlsoGroupName,
 } from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
-import type { VaultReaderPort } from '../../ports/vault-reader.js';
+import type {
+  OriginalFile,
+  VaultReaderPort,
+} from '../../ports/vault-reader.js';
 import {
   conceptOfArticle,
   isTrackEntry,
@@ -18,6 +21,16 @@ import {
   type TopicCatalog,
 } from '../catalog/index.js';
 import type { LevelView } from '../access-levels/index.js';
+import {
+  originalExtension,
+  servingOf,
+  type OriginalServing,
+} from './original-file.js';
+
+/** A document's kept original, ready to stream ("Ver original", KBC-148 FR-3). */
+export interface ServedOriginal extends OriginalFile, OriginalServing {
+  readonly name: string;
+}
 
 const SAFE_ID = /^(?!\/)(?!.*(^|\/)\.\.(\/|$))[^\0]+\.md$/;
 /** References shown per "Veja também" group before "ver todos" (KBC-003 BR-3). */
@@ -118,6 +131,7 @@ export class DocumentsService {
     const { catalog, entry } = located;
     const text = await this.readText(located);
     return {
+      ...(await this.originalOf(located)),
       id,
       title: entry.title,
       summary: entry.summary,
@@ -135,6 +149,47 @@ export class DocumentsService {
       body: splitFrontmatter(text).body.trim(),
       ...levelBadge(reader.level, catalog.topic.slug, entry.id),
     };
+  }
+
+  /**
+   * The original a document was converted from, under the document's own gate: a reader who
+   * may not see the document gets the same 404 as for one that does not exist (AC-5).
+   */
+  async original(
+    topic: string,
+    id: string,
+    reader: DocumentReader,
+  ): Promise<ServedOriginal> {
+    const found = await this.findOriginal(
+      this.requireEntry(topic, id, reader.level),
+    );
+    if (!found) throw new AppError('DOCUMENT_NOT_FOUND', 'Document not found');
+    return found;
+  }
+
+  /** "Ver original" shows only when the file is really there (a gone file: no dead link). */
+  private async originalOf(
+    located: Located,
+  ): Promise<Pick<KbDocument, 'original'>> {
+    const found = await this.findOriginal(located);
+    if (!found) return {};
+    const generatedDescription =
+      located.entry.original?.generatedDescription ?? false;
+    return { original: { name: found.name, generatedDescription } };
+  }
+
+  private async findOriginal({
+    catalog,
+    entry,
+  }: Located): Promise<ServedOriginal | null> {
+    const kept = entry.original;
+    if (!kept || !this.deps.vault.findOriginal) return null;
+    const extension = originalExtension(kept.name);
+    const file = await this.deps.vault.findOriginal(catalog.topic.slug, {
+      sha256: kept.sha256,
+      extension,
+    });
+    return file ? { ...file, ...servingOf(extension), name: kept.name } : null;
   }
 
   relationPage(

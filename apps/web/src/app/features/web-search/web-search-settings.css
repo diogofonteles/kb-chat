@@ -1,0 +1,19 @@
+/* "Pesquisa na web": the same look as "Groq de reserva" (its styles come first). */
+.connected-words,
+.lead,
+.hint {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* At least 16 px: a phone's browser zooms in on a smaller field. */
+@media (max-width: 1023px) {
+  .input {
+    font-size: 1rem;
+  }
+
+  .key-actions .secondary,
+  .key-actions .remove {
+    min-height: var(--target);
+  }
+}

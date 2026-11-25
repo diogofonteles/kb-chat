@@ -34,12 +34,46 @@ export interface CatalogEntry extends DocumentFacets {
   readonly sourcePath: string | null;
   /** A track (or recording) of the collection written by the app (KBC-099, ADR 0035 §5). */
   readonly media: CatalogMedia | null;
+  /** The kept original it was converted from (KBC-148): "Ver original". Absent: none. */
+  readonly original?: CatalogOriginal;
   /**
    * Only on a sub-collection's document seen from its parent (`ScopeView`, KBC-101 FR-5):
    * the collection it is in and its id there.
    */
   readonly home?: { readonly topic: string; readonly id: string };
 }
+
+/**
+ * The provenance keys kb-map writes (KBC-148, ADR 0040): the original is
+ * `raw/_originals/<sha256>.<ext>` in the document's own collection.
+ */
+export interface CatalogOriginal {
+  readonly sha256: string;
+  readonly name: string;
+  /** The body holds a model's description of an image (BR-4). */
+  readonly generatedDescription: boolean;
+}
+
+const SHA256 = /^[0-9a-f]{64}$/;
+
+/** The original behind a converted document, or undefined when it names none (or a bad one). */
+function toOriginal(
+  data: Readonly<Record<string, unknown>>,
+): CatalogOriginal | undefined {
+  const sha256 = toStringOrNull(data['original_sha256']);
+  const name = toStringOrNull(data['original_name']);
+  if (!sha256 || !SHA256.test(sha256) || !name) return undefined;
+  return {
+    sha256,
+    name: name.slice(0, 255),
+    generatedDescription: data['generated_description'] === true,
+  };
+}
+
+const withOriginal = (data: Readonly<Record<string, unknown>>) => {
+  const original = toOriginal(data);
+  return original ? { original } : {};
+};
 
 /** The `kb_chat_*` keys of a document the app rendered from a track (ADR 0035 §2). */
 export interface CatalogMedia {
@@ -166,6 +200,7 @@ export function toCatalogEntry(
   const sourcePath = toStringOrNull(data['source_path']);
   const media = toMedia(data);
   return {
+    ...withOriginal(data),
     id,
     title: rawTitle ? toDisplayTitle(rawTitle) : titleFromId(id),
     summary: toStringOrNull(data['summary']),

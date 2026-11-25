@@ -4,7 +4,7 @@ import {
   createMediaRequestSchema,
   failJobRequestSchema,
   MEDIA_SPEEDS,
-  hasAcceptedAudioExtension,
+  hasAcceptedMediaExtension,
   mediaItemSchema,
   completeSilencesRequestSchema,
   leasedJobSchema,
@@ -88,11 +88,15 @@ describe('media contracts', () => {
     ['aula.flac', true],
     ['aula.ogg', true],
     ['aula.opus', true],
+    ['aula.mp4', true],
+    ['aula.MOV', true],
+    ['aula.webm', true],
+    ['aula.mkv', true],
     ['aula.pdf', false],
     ['aula', false],
     ['mp3', false],
   ])('tells whether %s is an accepted audio file (%s)', (name, accepted) => {
-    expect(hasAcceptedAudioExtension(name)).toBe(accepted);
+    expect(hasAcceptedMediaExtension(name)).toBe(accepted);
   });
 
   it('describes a media item with nullable progress and failure', () => {

@@ -1,7 +1,7 @@
 ---
 id: KBC-148
 title: "Da fonte ao raw: conversão estruturada (Docling, MarkItDown, Firecrawl), originais guardados e proveniência, com a reconversão do acervo"
-status: ready
+status: in-review
 slice: complete-answers
 outcome: todo documento do acervo vira Markdown com títulos, capítulos, tabelas e páginas; o original fica guardado e rastreável; as seções do mapa nascem dos títulos
 depends_on: []

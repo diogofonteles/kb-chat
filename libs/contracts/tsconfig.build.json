@@ -5,6 +5,6 @@
     "outDir": "dist",
     "noEmit": false
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "build-types/*.d.ts"],
   "exclude": ["src/**/*.test.ts"]
 }

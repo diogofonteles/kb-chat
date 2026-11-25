@@ -11,7 +11,7 @@ import { UiCover } from '@ui/cover.js';
 import type { Topic } from '@kb-chat/contracts';
 import { mediaPagePath } from '@core/media/media-api.js';
 import type { UploadEntry } from './upload-entries.js';
-import { hasAcceptedAudioExtension } from '@kb-chat/contracts';
+import { hasAcceptedMediaExtension } from '@kb-chat/contracts';
 import { overQuota, sentOf, sizeOf } from './upload-rules.js';
 
 /** A reader hears a file's progress only at these steps, not at every percent (AC-8). */
@@ -55,7 +55,7 @@ export class UploadFileRow {
   );
   /** An audio file shows a note on green; anything else a page on grey. */
   protected readonly audio = computed(() =>
-    hasAcceptedAudioExtension(this.name()),
+    hasAcceptedMediaExtension(this.name()),
   );
   /** The card's edge: amber when it is already there, red when it cannot go. */
   protected readonly tone = computed((): 'warn' | 'err' | null => {
@@ -84,9 +84,9 @@ export class UploadFileRow {
   protected readonly problemShort = computed(() => {
     const { file, state } = this.entry();
     if (state.kind !== 'refused') return '';
-    return hasAcceptedAudioExtension(file.name)
+    return hasAcceptedMediaExtension(file.name)
       ? state.problem
-      : $localize`:@@media.upload.badTypeShort:Não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus.`;
+      : $localize`:@@media.upload.badTypeShort:Não é um áudio nem um vídeo aceito. Envie mp3, m4a, wav, flac, ogg, opus, mp4, mov, webm ou mkv.`;
   });
   /** The phone's card says the size alone (media-upload-chosen@mobile). */
   protected readonly metaShort = computed(() => {

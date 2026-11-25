@@ -76,8 +76,18 @@
       i18n-title="@@home.emptyTopicTitle"
       ><span i18n="@@home.emptyTopicText"
         >Eles aparecem aqui assim que forem adicionados.</span
-      ></ui-banner
-    >
+      >
+      @if (canAddContent()) {
+        <a
+          uiBannerAction
+          uiButton="white"
+          size="sm"
+          [routerLink]="addContentPath"
+        >
+          <span i18n="@@library.addContent">Adicionar conteúdo</span>
+        </a>
+      }
+    </ui-banner>
   }
   @if (tiles().length > 0) {
     <nav class="recents" aria-label="Recentes" i18n-aria-label="@@home.recents">

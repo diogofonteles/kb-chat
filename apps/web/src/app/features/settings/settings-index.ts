@@ -99,6 +99,14 @@ export const SETTINGS_SECTIONS: readonly SectionEntry[] = [
     keywords: () => $localize`:@@settings.groqWords:nuvem teto gasto`,
   },
   {
+    id: 'web-search',
+    slug: 'pesquisa-na-web',
+    group: 'media',
+    label: () => $localize`:@@settings.webSearch:Pesquisa na web (Firecrawl)`,
+    keywords: () =>
+      $localize`:@@settings.webSearchWords:firecrawl chave créditos saldo links vídeos`,
+  },
+  {
     id: 'voice-profiles',
     slug: 'perfis-de-voz',
     group: 'media',
@@ -127,6 +135,8 @@ const MEDIA_ADMIN: ReadonlySet<SettingsSection> = new Set([
   'transcribers',
   'terms',
   'groq',
+  // KBC-185: where documents are sent from the app, which needs the media library.
+  'web-search',
 ]);
 
 /** Only what the person may change (KBC-010): the v1 rules, section by section. */

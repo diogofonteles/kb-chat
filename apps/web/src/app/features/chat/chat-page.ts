@@ -96,7 +96,7 @@ const isSettingsUrl = (url: string): boolean =>
   /^\/configuracoes(\/|\?|#|$)/.test(url);
 
 const isMediaUrl = (url: string): boolean =>
-  /^\/(midia|biblioteca|fila|acervos|configuracoes|catalogo-ui)(\/|\?|#|$)/.test(
+  /^\/(midia|biblioteca|fila|adicionar|acervos|configuracoes|catalogo-ui)(\/|\?|#|$)/.test(
     url,
   );
 
@@ -267,10 +267,11 @@ export class ChatPage {
   /**
    * The pages with a header of their own (v2 · Mídia — Player, Fila e Marcadores): the
    * player names the collection ("Áudio · Alquimia Prática"), "Meus marcadores" and the
-   * Fila are lists of every collection, so the shell's collection title stays out.
+   * Fila are lists of every collection, "Adicionar conteúdo" chooses its own (KBC-184), so
+   * the shell's collection title stays out.
    */
   protected readonly playerPage = computed(() =>
-    /^\/(midia\/[^/]+|fila)$/.test(this.path()),
+    /^\/(midia\/[^/]+|fila|adicionar)$/.test(this.path()),
   );
   /**
    * On a phone the page of what plays is the full-screen player (KBC-129 FR-2, v2 · Mídia —

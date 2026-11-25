@@ -360,6 +360,25 @@ describe('Media with an access level (KBC-105)', () => {
     expect(master.json().media.id).toBe(hidden.id);
   });
 
+  it('an audio whose bytes stopped half-way takes the level chosen when it goes on', async () => {
+    const { ana } = await scaledWorld();
+    const made = await ana.call(
+      'POST',
+      '/api/v1/topics/hermetismo/media',
+      request('Parado', { level: 'qs' }),
+    );
+    expect(made.statusCode, made.body).toBe(201);
+    const { id } = made.json<MediaItem>();
+    const changed = await ana.call('PATCH', `/api/v1/media/${id}`, {
+      level: 'ci',
+    });
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect(changed.json()).toMatchObject({
+      status: 'uploading',
+      level: { id: 'ci' },
+    });
+  });
+
   it('BR-3, AC-8: the sender lowers the level of her audio; above her own is refused; the change is audited', async () => {
     const { world, ana } = await scaledWorld();
     const own = await sent(world, {

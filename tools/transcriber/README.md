@@ -78,6 +78,24 @@ reason and writes nothing.
 
 **Pending:** the commands follow ADR 0035 §3; the flags, the receipts' spend format and whether kb 0.0.12 classifies a file it did not ingest are checked by the owner's spike on a vault copy (it spends money). If it does not, the fallback is `kb ingest file --force` (ADR 0035 option 5).
 
+## Documents and links sent from the app (KBC-149)
+
+A Mac that publishes (above) also takes the documents and links people send from the app
+(`doc-ingest` jobs, ADR 0040): no other marking. With `uv` on PATH and `tools/kb-map` next to
+this tool, the worker asks for them with `kb-publish` and, under the same vault lock:
+
+- a file (fetched from the API) or a web link goes through
+  `uv run --project tools/kb-map --extra convert kb-map convert <collection> <file|url> --json`
+  (Docling, MarkItDown, Firecrawl or Jina; the original kept in `raw/_originals/`; the Markdown
+  handed to `kb ingest file`), then `kb classify`, `index`, `link`, `index`, then
+  `kb-map sections --doc` when the collection has a map; the app is told each step and the
+  result, or why it failed (the converter's or kb's words, for masters);
+- a YouTube link has its audio downloaded with `yt-dlp` (when on PATH) and sent back to the
+  API, where it becomes the sender's recording and follows the media path.
+
+The first run installs the converters (Docling brings torch), once. An API from before
+KBC-149 answers 400 to `doc-ingest`: the worker then stops asking for it until restarted.
+
 ## The kb's AI keys (KBC-117)
 
 `kb classify` and `kb link` need `OPENROUTER_API_KEY` (and read `ANTHROPIC_API_KEY` and

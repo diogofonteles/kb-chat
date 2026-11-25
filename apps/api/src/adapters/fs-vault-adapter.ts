@@ -2,10 +2,17 @@ import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { parse } from 'yaml';
 import { z } from 'zod';
-import type { TopicFolder, VaultReaderPort } from '../ports/vault-reader.js';
+import type {
+  OriginalFile,
+  TopicFolder,
+  VaultReaderPort,
+} from '../ports/vault-reader.js';
 
 const SERVED_ROOTS = ['raw', join('wiki', 'concepts')] as const;
 const EXCLUDED_SEGMENT = '_quarantine';
+/** Kept originals (KBC-148): never documents, whatever their extension. */
+const ORIGINALS_SEGMENT = '_originals';
+const ORIGINAL_NAME = /^[0-9a-f]{64}\.[a-z0-9]{1,10}$/;
 const MAX_NESTING = 2;
 
 const topicYamlSchema = z.looseObject({
@@ -53,7 +60,13 @@ async function listServedRoot(
   return entries
     .filter(
       (entry) =>
-        isMarkdown(entry) && !entry.split(sep).includes(EXCLUDED_SEGMENT),
+        isMarkdown(entry) &&
+        !entry
+          .split(sep)
+          .some(
+            (segment) =>
+              segment === EXCLUDED_SEGMENT || segment === ORIGINALS_SEGMENT,
+          ),
     )
     .map((entry) => join(servedRoot, entry).split(sep).join('/'));
 }
@@ -89,6 +102,24 @@ export class FsVaultAdapter implements VaultReaderPort {
       )
         return null;
       return await readFile(realFile, 'utf8');
+    } catch {
+      return null;
+    }
+  }
+
+  async findOriginal(
+    topic: string,
+    original: { readonly sha256: string; readonly extension: string },
+  ): Promise<OriginalFile | null> {
+    const name = `${original.sha256}.${original.extension}`;
+    if (!ORIGINAL_NAME.test(name)) return null;
+    const folder = join(this.root, topic, 'raw', ORIGINALS_SEGMENT);
+    try {
+      const realFolder = await realpath(folder);
+      const realFile = await realpath(join(folder, name));
+      if (relative(realFolder, realFile) !== name) return null;
+      const info = await stat(realFile);
+      return info.isFile() ? { path: realFile, size: info.size } : null;
     } catch {
       return null;
     }

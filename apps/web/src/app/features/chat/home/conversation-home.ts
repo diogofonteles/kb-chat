@@ -7,6 +7,7 @@ import {
   output,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { EMPTY, Subject, catchError, switchMap } from 'rxjs';
 import type {
   Conversation,
@@ -15,6 +16,10 @@ import type {
 } from '@kb-chat/contracts';
 import { HistoryStore } from '@core/history/history-store.js';
 import { RESEARCH_RESTORER } from '@core/history/research-restorer.js';
+import {
+  ADD_CONTENT_PATH,
+  canAddContent,
+} from '@features/add-content/add-content-path.js';
 import type { SidebarAction } from '@features/sidebar/sidebar.js';
 import { PendingTranscriptions } from '@features/transcribers/pending-transcriptions.js';
 import { UiBanner, UiButton, UiCover, UiEmptyState } from '@ui/index.js';
@@ -45,7 +50,14 @@ const STATUS_LABELS: Record<ConversationStatus, () => string> = {
  */
 @Component({
   selector: 'app-conversation-home',
-  imports: [PendingTranscriptions, UiBanner, UiButton, UiCover, UiEmptyState],
+  imports: [
+    PendingTranscriptions,
+    RouterLink,
+    UiBanner,
+    UiButton,
+    UiCover,
+    UiEmptyState,
+  ],
   templateUrl: './conversation-home.html',
   styleUrl: './conversation-home.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -55,6 +67,10 @@ export class ConversationHome {
   protected readonly views = inject(ViewStore);
   private readonly history = inject(HistoryStore);
   private readonly restorer = inject(RESEARCH_RESTORER);
+
+  /** An empty collection says how to fill it (KBC-184). */
+  protected readonly canAddContent = canAddContent();
+  protected readonly addContentPath = `/${ADD_CONTENT_PATH}`;
 
   readonly researching = input(false);
   /** "Nova conversa em <acervo>" after choosing another collection. */

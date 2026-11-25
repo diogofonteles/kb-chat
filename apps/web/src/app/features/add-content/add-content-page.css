@@ -1,0 +1,312 @@
+/* "Adicionar conteúdo" (KBC-184): one column, the same rhythm as the queue's page. */
+:host {
+  display: block;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.page {
+  display: grid;
+  align-content: start;
+  max-width: 52rem;
+  min-height: 100%;
+  padding-bottom: var(--space-8);
+}
+
+.head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-8) var(--space-8) var(--space-5);
+}
+
+.back {
+  display: none;
+}
+
+.head-text {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.heading {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.heading:focus {
+  outline: none;
+}
+
+.sub,
+.hint,
+.more {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.body {
+  display: grid;
+  gap: var(--space-5);
+  padding: 0 var(--space-8);
+}
+
+.where {
+  display: flex;
+  gap: var(--space-3);
+  align-items: end;
+}
+
+/* To the edge, like the fields below, when there is no button beside it. */
+.where .ui-field {
+  flex: 1;
+  min-width: 0;
+}
+
+/* At least 16 px: a phone's browser zooms in on a smaller field. */
+.big {
+  font-size: 1rem;
+}
+
+.new-collection {
+  flex: none;
+  min-height: 2.75rem;
+}
+
+.ways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.way {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 2.75rem;
+}
+
+.drop {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  border: 1px dashed var(--overlay-4);
+  border-radius: var(--radius-card);
+  text-align: center;
+}
+
+.drop.over {
+  border-color: var(--color-text);
+  background: var(--overlay-2);
+}
+
+.pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.pick button {
+  min-height: 2.75rem;
+}
+
+.status {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.status:empty {
+  display: none;
+}
+
+.found {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.found button {
+  min-height: 2.75rem;
+}
+
+.found-text {
+  display: grid;
+  gap: 0.125rem;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.found-text span {
+  color: var(--color-text-muted);
+}
+
+.left summary {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.left .rows {
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.over {
+  grid-column: 1 / -1;
+}
+
+.rows {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 2.75rem;
+}
+
+.row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-text p {
+  margin: 0;
+}
+
+.name {
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+}
+
+.problem {
+  color: var(--color-danger);
+  font-size: var(--text-meta);
+}
+
+.links {
+  min-height: 8rem;
+  overflow-wrap: anywhere;
+}
+
+.count {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--text-meta);
+  overflow-wrap: anywhere;
+}
+
+.send {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.go {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* In reach at the foot of what scrolls while the list chosen runs under it. */
+.go.stuck {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--overlay-line);
+  background: var(--color-bg);
+}
+
+.go-text {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.cap {
+  max-width: 24rem;
+}
+
+.include {
+  min-height: 2.75rem;
+}
+
+.group {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.group h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.more a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: inherit;
+}
+
+@media (max-width: 1023px) {
+  .head {
+    align-items: center;
+    padding: calc(env(safe-area-inset-top) + var(--space-3)) var(--space-4)
+      var(--space-3);
+  }
+
+  .back {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin-left: calc(-1 * var(--space-3));
+    color: var(--color-text);
+  }
+
+  .heading {
+    font-size: 1.5rem;
+  }
+
+  .sub {
+    display: none;
+  }
+
+  .body {
+    padding: 0 var(--space-4);
+  }
+
+  .where,
+  .cap {
+    max-width: none;
+  }
+
+  .include {
+    flex: 1 1 auto;
+  }
+}
+
+.tall {
+  min-height: 2.75rem;
+}

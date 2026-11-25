@@ -142,6 +142,13 @@ export function mediaDb(media: Media): DatabaseSync {
   return new DatabaseSync(join(media.mediaDir, 'media.db'), { readOnly: true });
 }
 
+/** Every kb-publish lease past its time, as after an API that was away. */
+export function expireKbLeases(media: Media): void {
+  const db = new DatabaseSync(join(media.mediaDir, 'media.db'));
+  db.exec(`UPDATE kb_publish_jobs SET lease_until = 1 WHERE status = 'leased'`);
+  db.close();
+}
+
 /**
  * The media database as one from before KBC-099 left it: published tracks with no document
  * and no kb-publish job (the tracks "Publicar no acervo as faixas que já existem" is for).

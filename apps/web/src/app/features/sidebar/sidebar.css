@@ -228,6 +228,35 @@
   color: var(--color-text);
 }
 
+/* "Adicionar conteúdo" (KBC-184): a visible row with words under the Acervos head. */
+.add-content {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  margin: 0 var(--space-2) var(--space-2);
+  border: 1px solid var(--overlay-line);
+  border-radius: var(--radius-pill);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.add-content:hover {
+  background: var(--overlay-2);
+}
+
+:host(.collapsed) .add-content {
+  margin-inline: 0;
+  border-color: transparent;
+}
+
+:host(.collapsed) .add-content-text {
+  display: none;
+}
+
 /* The Menu and Biblioteca expandida: one list, the sections one after the other with no head
    or hairline between them (v2 · Menu lateral aberto); the chosen collection in green, as the
    page you are on. */

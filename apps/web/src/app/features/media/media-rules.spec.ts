@@ -147,7 +147,7 @@ describe('upload rules (MA-20, MA-25)', () => {
 
   it('says what is wrong and how to fix it', () => {
     expect(fileProblemOf({ name: 'apostila.pdf', size: 10 })).toBe(
-      'Este arquivo não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus.',
+      'Este arquivo não é um áudio nem um vídeo aceito. Envie mp3, m4a, wav, flac, ogg, opus, mp4, mov, webm ou mkv.',
     );
     expect(fileProblemOf({ name: 'aula.wav', size: 4.1 * 1024 ** 3 })).toBe(
       'Este arquivo tem 4,1 GB. O limite é 4 GB.',

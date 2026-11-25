@@ -79,7 +79,7 @@ describe('toUiErrorCode', () => {
   });
 
   it('has a plain pt-BR message for the common codes', () => {
-    expect(errorMessage('OFFLINE')).toMatch(/servidor de busca/);
+    expect(errorMessage('OFFLINE')).toMatch(/falar com o servidor/);
     expect(errorMessage('DOCUMENT_NOT_FOUND')).toMatch(/quarentena/);
   });
 });

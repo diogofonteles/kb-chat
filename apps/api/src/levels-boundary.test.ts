@@ -184,11 +184,22 @@ const DECLARED: Readonly<Record<string, Readonly<Record<string, string>>>> = {
       'what the Mac must publish and the folders it may use, never a person',
     listMedia: 'the reconciler of track documents, never a person',
   },
+  'document-uploads-factory.ts': {
+    topics: 'titles and domains for the Mac to make a vault folder, no entries',
+    get: 'whether a document arrived, and the level check that decides if it is named',
+    scope:
+      'the document already made from a file or link: named only when seesDocument admits it',
+    getMedia:
+      'whether the recording of the person’s own link is done; nothing of it is answered',
+  },
   'track-proposals-factory.ts': {
     get: 'the collection title for the AI prompt of an edit already admitted',
   },
   'track-subjects-factory.ts': {
     get: "the collection's concept names and title, for an edit already admitted",
+  },
+  'web-search-factory.ts': {
+    get: 'whether the collection exists, no entries',
   },
 };
 

@@ -67,11 +67,17 @@ def json_safe(value: Any) -> Any:
     return value
 
 
+# The API's limits (RAW_TRANSCRIPT_LIMITS): past them it refuses the whole transcript.
+WORD_CHARS = 200
+SEGMENT_CHARS = 10_000
+
+
 def sanitized(result: dict) -> dict:
     """What the API accepts: spans with finite times, in order.
 
     A word or segment without a finite start and end (whisper's NaN became None) is dropped;
-    one that ends before it starts ends where it starts (word timestamps may cross by ms).
+    one that ends before it starts ends where it starts (word timestamps may cross by ms). In
+    a language it does not know whisper may run on one endless "word": it is cut.
     """
     segments = [span for span in result.get("segments", []) if _timed(span)]
     for segment in segments:
@@ -80,6 +86,8 @@ def sanitized(result: dict) -> dict:
             segment["words"] = [word for word in segment["words"] if _timed(word)]
             for word in segment["words"]:
                 _order(word)
+                word["word"] = str(word.get("word", ""))[:WORD_CHARS]
+        segment["text"] = str(segment.get("text", ""))[:SEGMENT_CHARS]
     return {**result, "segments": segments}
 
 

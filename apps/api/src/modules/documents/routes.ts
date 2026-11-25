@@ -10,11 +10,17 @@ import type {
   FastifyRequest,
 } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { createReadStream } from 'node:fs';
 import { z } from 'zod';
 import type { TrackShelf } from '../../ports/track-shelf.js';
 import { levelViewOf } from '../access-levels/index.js';
 import { hasFeature, viewerOf, type RouteAccess } from '../auth/index.js';
-import type { DocumentReader, DocumentsService } from './documents-service.js';
+import type {
+  DocumentReader,
+  DocumentsService,
+  ServedOriginal,
+} from './documents-service.js';
+import { dispositionOf } from './original-file.js';
 
 /** What "Veja também" needs to show tracks (absent with media off: texts only). */
 export interface DocumentRouteOptions {
@@ -101,6 +107,43 @@ function registerRelations(
   );
 }
 
+const originalHeaders = (original: ServedOriginal) => ({
+  'content-type': original.mime,
+  'content-length': original.size,
+  'content-disposition': dispositionOf(original.name, original.inline),
+  'x-content-type-options': 'nosniff',
+  'content-security-policy': "default-src 'none'; sandbox",
+  'cache-control': 'private, no-store',
+});
+
+/**
+ * "Ver original" (KBC-148 FR-3): the kept file, under the document's own level. Nothing the
+ * browser would run on this origin is shown in place (HTML, SVG): those download, sandboxed.
+ */
+function registerOriginal(
+  app: FastifyInstance,
+  { service, tracks }: { service: DocumentsService } & DocumentRouteOptions,
+): void {
+  app.withTypeProvider<ZodTypeProvider>().get(
+    '/api/v1/topics/:topic/documents/:id/original',
+    {
+      config: { access: READ_ACCESS },
+      schema: { params: documentParams },
+    },
+    async (request, reply) => {
+      const { topic, id } = request.params;
+      const original = await service.original(
+        topic,
+        id,
+        readerOf(request, { topic, tracks }),
+      );
+      return reply
+        .headers(originalHeaders(original))
+        .send(createReadStream(original.path));
+    },
+  );
+}
+
 export const documentRoutes =
   (
     service: DocumentsService,
@@ -109,4 +152,5 @@ export const documentRoutes =
   async (app) => {
     registerDocument(app, { service, tracks });
     registerRelations(app, { service, tracks });
+    registerOriginal(app, { service, tracks });
   };

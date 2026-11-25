@@ -9,11 +9,13 @@ text gets, over the whole topic: `classify`, `index`, `link`, `index`. kb is rea
 
 The flags and receipts below are the ones the owner's spike verified on kb 0.0.12
 (2026-11-06): `--budget` exists on `classify` and `link` only (`kb index --topic <t>` is
-local and refuses it); the spend is the `decisions:` and `generation:` receipt lines; a
-budget reached leaves documents "undecided" with exit 0, which is reported as incomplete.
+local and refuses it; with `--embed=false` QMD then embeds only this topic); the spend is the
+`decisions:` and `generation:` receipt lines; a budget reached leaves documents "undecided"
+with exit 0, which is reported as incomplete.
 """
 
 import fcntl
+import json
 import logging
 import os
 import re
@@ -74,6 +76,14 @@ class KbPort(Protocol):
         """`kb topic new`: the collection's folder in the vault (KBC-114)."""
         ...
 
+    def refusals(self, topic: str) -> KbRun:
+        """What kb refused in the collection and waits for a person, as JSON."""
+        ...
+
+    def accept(self, topic: str, item: str) -> KbRun:
+        """`kb review accept`: what was refused goes into the collection."""
+        ...
+
 
 class KbStepFailed(Exception):
     """A kb step exited with an error: the job fails with kb's output (AC-4) and what kb
@@ -106,6 +116,21 @@ def spend_of(output: str) -> float:
     return sum(float(found) for found in SPEND.findall(output))
 
 
+def review_item_of(output: str, document: str) -> str | None:
+    """The refused document's item in `kb review --format json` (kb's notes may follow it)."""
+    start = output.find("{")
+    if start < 0:
+        return None
+    try:
+        listing, _end = json.JSONDecoder().raw_decode(output[start:])
+    except ValueError:
+        return None
+    for item in listing.get("items") or []:
+        if item.get("subject") == document and (item.get("action") or {}).get("quarantined"):
+            return str(item["id"])
+    return None
+
+
 def undecided_in(output: str) -> tuple[set[str], bool]:
     """The documents a step left undecided by name, and whether it left some unnamed."""
     named = {path for line in UNDECIDED_DOCUMENTS.findall(output) for path in line.split()}
@@ -122,15 +147,28 @@ class KbCli:
     binary: str = "kb"
     # The kb's AI keys (KBC-117): only in kb's own environment, never in the worker's.
     env: dict[str, str] = field(default_factory=dict, repr=False)
+    # QMD's own binary: embeds one collection; without it, kb embeds them all.
+    qmd: str | None = None
     _version: str | None = field(default=None, init=False, repr=False, compare=False)
 
     def command(self, step: str, topic: str, budget_usd: float) -> list[str]:
-        if step not in BUDGETED:
-            return [self.binary, step, "--topic", topic]
-        return [self.binary, step, topic, "--budget", f"{budget_usd:.4f}"]
+        if step in BUDGETED:
+            return [self.binary, step, topic, "--budget", f"{budget_usd:.4f}"]
+        command = [self.binary, step, "--topic", topic]
+        return [*command, "--embed=false"] if self._embeds_apart(step) else command
 
     def run(self, step: str, topic: str, budget_usd: float) -> KbRun:
-        return self._run(self.command(step, topic, budget_usd))
+        done = self._run(self.command(step, topic, budget_usd))
+        if not done.ok or not self._embeds_apart(step):
+            return done
+        # `kb index` embeds every collection's pending documents, not only this one's: after
+        # a reconversion that is thousands, and this document would wait an hour for them.
+        embedded = self._run([str(self.qmd), "embed", "-c", topic, "--timeout", "0"])
+        output = f"{done.output}\n{embedded.output}".strip()
+        return KbRun(ok=embedded.ok, output=output, spend_usd=done.spend_usd)
+
+    def _embeds_apart(self, step: str) -> bool:
+        return step == "index" and self.qmd is not None
 
     def topic_command(self, slug: str, title: str, domain: str) -> list[str]:
         """Each value its own argument: a title with spaces or a colon is never split."""
@@ -140,6 +178,14 @@ class KbCli:
     def new_topic(self, slug: str, title: str, domain: str) -> KbRun:
         """Scaffolds the folder (kb 0.0.12: local, spends nothing; refuses an existing one)."""
         return self._run(self.topic_command(slug, title, domain))
+
+    def refusals(self, topic: str) -> KbRun:
+        return self._run([self.binary, "review", topic, "--queue", "gate", "--format", "json"])
+
+    def accept(self, topic: str, item: str) -> KbRun:
+        """Local (kb 0.0.12): restoring a document asks no model."""
+        command = [self.binary, "review", "accept", item, "--topic", topic, "--budget", "0"]
+        return self._run(command)
 
     def version(self) -> str | None:
         """`kb version`'s first line ("0.0.12 (commit=…)"), for the status; None if it fails."""
@@ -185,7 +231,9 @@ def kb_or_none(vault: str | None, env: dict[str, str] | None = None) -> KbCli | 
     if not vault or not Path(vault).is_dir():
         return None
     binary = shutil.which("kb")
-    return KbCli(Path(vault), binary, env=dict(env or {})) if binary else None
+    if not binary:
+        return None
+    return KbCli(Path(vault), binary, env=dict(env or {}), qmd=shutil.which("qmd"))
 
 
 def _scalar(value: str) -> str | int | float:
@@ -330,6 +378,19 @@ class KbPublisher:
             folder = target.parent
             if folder.is_dir() and not any(folder.iterdir()):
                 folder.rmdir()
+
+    def accept(self, topic: str, document: str) -> None:
+        """The document kb refused, back in the collection, by its item in kb's review queue."""
+        listed = self.kb.refusals(topic)
+        if not listed.ok:
+            raise KbStepFailed("review", listed.output)
+        item = review_item_of(listed.output, document)
+        if item is None:
+            # Never the listing itself: the titles in it are anyone's words, not kb's.
+            raise KbStepFailed("review", f"no item waits for {document}")
+        done = self.kb.accept(topic, item)
+        if not done.ok:
+            raise KbStepFailed("review accept", done.output)
 
     def run_kb(self, topic: str, budget_usd: float) -> tuple[float, set[str], bool]:
         """The steps in order, classify and link within what is left of the budget.

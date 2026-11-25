@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import {
-  hasAcceptedAudioExtension,
+  hasAcceptedMediaExtension,
   remapBookmark,
   type Author,
   type ContentLevel,
@@ -285,7 +285,7 @@ export class MediaService {
     request: Omit<CreateMediaRequest, 'plan'>,
   ): MediaItem {
     this.assertTopic(topic);
-    if (!hasAcceptedAudioExtension(request.fileName))
+    if (!hasAcceptedMediaExtension(request.fileName))
       throw new AppError('VALIDATION_FAILED', 'Not an accepted audio file', {
         details: { field: 'fileName' },
       });

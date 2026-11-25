@@ -216,6 +216,8 @@ const WORKER =
  * must answer Ana or the master 2xx at least once, so that its probe is not empty.
  */
 export const NO_CONTENT: Readonly<Record<string, string>> = {
+  'GET /api/v1/document-uploads/:id/entries':
+    'only who sent the list, and masters, while it waits for a choice (KBC-186): what the site names, nothing of the collection',
   'GET /api/v1/research/turns/:turnId/events':
     'only while a turn of the person runs; the probed turns end inside their request, whose stream is probed',
   'GET /api/v1/openrouter/callback':
@@ -225,6 +227,7 @@ export const NO_CONTENT: Readonly<Record<string, string>> = {
   'GET /api/v1/media/:id/edit/proposals/:runId':
     'needs a paid AI run; behind the edit rule, which refuses Ana on this recording (403 EDIT_ABOVE_YOUR_LEVEL)',
   'GET /api/v1/media-worker/terms': WORKER,
+  'GET /api/v1/media-worker/jobs/:id/document': WORKER,
   'GET /api/v1/media-worker/jobs/:id/audio': WORKER,
   'GET /api/v1/media-worker/jobs/:id/audio/:mediaId': WORKER,
   'GET /api/v1/media-worker/jobs/:id/voice-profiles': WORKER,

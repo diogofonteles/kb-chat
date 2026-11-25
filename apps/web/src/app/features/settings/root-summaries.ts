@@ -9,7 +9,9 @@ import {
   termListSchema,
   transcriberListSchema,
   voiceProfileReportSchema,
+  webSearchSettingsSchema,
   type HouseAiView,
+  type WebSearchSettings,
 } from '@kb-chat/contracts';
 import { ACT_AS_AUDIT_URL, MY_ACCESSES_URL } from '@core/auth/act-as-api.js';
 import { accessRequestsUrl } from '@core/auth/access-api.js';
@@ -18,6 +20,7 @@ import { groqUrl } from '@core/media/groq-api.js';
 import { termsUrl } from '@core/media/terms-api.js';
 import { transcribersUrl } from '@core/media/transcribers-api.js';
 import { voiceReportUrl } from '@core/media/voice-profiles-api.js';
+import { webSearchSettingsUrl } from '@core/web-search/web-search-api.js';
 import { GROQ_MODE_OPTIONS } from '@features/transcribers/groq-panel.js';
 import type { SettingsSection } from './settings-store.js';
 
@@ -56,6 +59,13 @@ const houseLine = (view: HouseAiView): string => {
 
 const groqLine = (mode: string): string =>
   GROQ_MODE_OPTIONS.find((one) => one.mode === mode)?.label() ?? '';
+
+const webSearchLine = ({ connected, credits }: WebSearchSettings): string => {
+  if (!connected) return $localize`:@@settings.root.webSearchOff:Não conectada`;
+  return credits
+    ? $localize`:@@settings.root.webSearchCredits:Conectada · ${credits.remaining}:count: créditos`
+    : $localize`:@@settings.root.webSearchOn:Conectada`;
+};
 
 const SUMMARIES: readonly Summary[] = [
   {
@@ -117,6 +127,11 @@ const SUMMARIES: readonly Summary[] = [
     id: 'groq',
     url: groqUrl,
     line: (body) => groqLine(groqSettingsSchema.parse(body).mode),
+  },
+  {
+    id: 'web-search',
+    url: webSearchSettingsUrl,
+    line: (body) => webSearchLine(webSearchSettingsSchema.parse(body)),
   },
   {
     id: 'voice-profiles',

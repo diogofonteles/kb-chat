@@ -58,6 +58,11 @@ import { UiCover } from '@ui/cover.js';
 import { UiIcon } from '@ui/icon.js';
 import { UiLibraryItem } from '@ui/library-item.js';
 import { UiMenu, UiMenuItem } from '@ui/menu.js';
+import {
+  ADD_CONTENT_PATH,
+  addContentQuery,
+  canAddContent,
+} from '@features/add-content/add-content-path.js';
 import { UiProgress } from '@ui/progress.js';
 import {
   collectionTree,
@@ -259,6 +264,7 @@ export class Sidebar {
   readonly expandToggled = output();
 
   protected readonly newConversationLabel = $localize`:@@sidebar.new:Nova conversa`;
+  protected readonly addContentLabel = $localize`:@@library.addContent:Adicionar conteúdo`;
   protected readonly newCollectionLabel = $localize`:@@library.newCollection:Novo acervo`;
   protected readonly collapseLabel = $localize`:@@library.collapse:Recolher Sua biblioteca`;
   protected readonly expandLabel = $localize`:@@library.expand:Expandir Sua biblioteca`;
@@ -451,6 +457,10 @@ export class Sidebar {
    * title, count and caret) prevails over the frame where they conflict.
    */
   protected readonly headless = computed(() => this.expanded());
+  /** "Adicionar conteúdo" (KBC-184): for who may send, into the collection in use. */
+  protected readonly canAddContent = canAddContent();
+  protected readonly addContentPath = `/${ADD_CONTENT_PATH}`;
+  protected readonly addContentQuery = addContentQuery;
   /** "Novo acervo" and "Editar acervo" (KBC-048 FR-6): only with "Criar acervos". */
   protected readonly canCreateCollections = computed(() =>
     this.session.can('collection-create'),
@@ -550,6 +560,19 @@ export class Sidebar {
 
   protected openMedia(): void {
     this.acted.emit('media');
+  }
+
+  /** "Adicionar conteúdo" was opened from here: a page, as the media ones. */
+  protected openAddContent(): void {
+    this.acted.emit('media');
+  }
+
+  /** "Criar e adicionar conteúdo" (KBC-184): the new collection's page of content. */
+  protected addTo(topic: Topic): void {
+    this.acted.emit('media');
+    void this.router.navigate([this.addContentPath], {
+      queryParams: addContentQuery(topic.slug),
+    });
   }
 
   /** The name of a row's ⋯ in "Biblioteca expandida". */
