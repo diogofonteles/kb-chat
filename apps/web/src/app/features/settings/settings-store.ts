@@ -40,6 +40,7 @@ export type SettingsSection =
   | 'terms'
   | 'groq'
   | 'web-search'
+  | 'removed-documents'
   | 'voice-profiles'
   | 'audit'
   | 'accesses'

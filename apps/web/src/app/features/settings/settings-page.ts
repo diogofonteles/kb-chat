@@ -31,6 +31,7 @@ import { WebSearchSettingsPanel } from '@features/web-search/web-search-settings
 import { LearningPanel } from '@features/transcribers/learning-panel.js';
 import { TermsPanel } from '@features/transcribers/terms-panel.js';
 import { TranscribersPanel } from '@features/transcribers/transcribers-panel.js';
+import { RemovedDocuments } from '@features/document-removals/removed-documents.js';
 import { VoiceProfilesPanel } from '@features/voice-profiles/voice-profiles-panel.js';
 import {
   UiAvatar,
@@ -133,6 +134,7 @@ const isProvider = (id: string): id is AiProvider => id in PROVIDER_COPY;
     AiStatusCard,
     PeoplePanel,
     HouseAiPanel,
+    RemovedDocuments,
     TranscribersPanel,
     ExistingTracks,
     TermsPanel,

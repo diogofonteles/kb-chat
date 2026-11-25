@@ -69,6 +69,14 @@ export const SETTINGS_SECTIONS: readonly SectionEntry[] = [
       $localize`:@@settings.houseWords:openrouter codex chatgpt modelos gratuitos reserva`,
   },
   {
+    id: 'removed-documents',
+    slug: 'removidos',
+    group: 'admin',
+    label: () => $localize`:@@settings.removed:Removidos do acervo`,
+    keywords: () =>
+      $localize`:@@settings.removedWords:documentos excluir apagar lixeira restaurar trazer de volta quarentena`,
+  },
+  {
     id: 'audit',
     slug: 'auditoria',
     group: 'admin',
@@ -137,6 +145,8 @@ const MEDIA_ADMIN: ReadonlySet<SettingsSection> = new Set([
   'groq',
   // KBC-185: where documents are sent from the app, which needs the media library.
   'web-search',
+  // KBC-187: the same; the Mac that publishes moves what is removed.
+  'removed-documents',
 ]);
 
 /** Only what the person may change (KBC-010): the v1 rules, section by section. */
