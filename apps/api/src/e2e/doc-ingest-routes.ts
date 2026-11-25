@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, resolve, sep } from 'node:path';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
-import type { DocIngestJob } from '@kb-chat/contracts';
+import type { DocIngestJob, DocIngestSource } from '@kb-chat/contracts';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { PUBLIC } from '../modules/auth/index.js';
 import type { CatalogRegistry } from '../modules/catalog/index.js';
-import type { DocIngestQueue } from '../modules/document-uploads/index.js';
+import type { DocIngestWork } from '../modules/document-uploads/index.js';
 
 const WORKER = 'transcriber:e2e-mac';
 /** A link whose host says so does not convert (KBC-149 AC-4). */
@@ -43,7 +43,7 @@ const extensionOf = (name: string): string =>
 export function registerDocIngestMac(
   app: FastifyInstance,
   input: {
-    queue: () => DocIngestQueue | null;
+    queue: () => DocIngestWork | null;
     vault: string;
     catalog: CatalogRegistry;
   },
@@ -66,10 +66,10 @@ export function registerDocIngestMac(
   );
 }
 
-type Owner = Parameters<DocIngestQueue['step']>[0];
+type Owner = Parameters<DocIngestWork['step']>[0];
 
 async function ingestAll(
-  queue: DocIngestQueue,
+  queue: DocIngestWork,
   { topic, vault }: { topic: string; vault: string },
 ): Promise<number> {
   let done = 0;
@@ -84,7 +84,7 @@ async function ingestAll(
   return done;
 }
 
-async function takeAndHold(queue: DocIngestQueue, topic: string) {
+async function takeAndHold(queue: DocIngestWork, topic: string) {
   const job = queue.lease(WORKER, topic);
   if (!job) return;
   const owner = { jobId: job.id, worker: WORKER, leaseId: job.leaseId };
@@ -92,12 +92,20 @@ async function takeAndHold(queue: DocIngestQueue, topic: string) {
 }
 
 async function ingest(
-  queue: DocIngestQueue,
+  queue: DocIngestWork,
   input: { job: DocIngestJob; vault: string },
 ): Promise<void> {
   const { job } = input;
   const owner = { jobId: job.id, worker: WORKER, leaseId: job.leaseId };
   const { source } = job;
+  if (source.kind === 'remove' || source.kind === 'restore') {
+    await move(input.vault, job.topic, source);
+    return queue.complete(owner, {
+      ...owner,
+      outcome: { state: 'moved' },
+      spendUsd: 0,
+    });
+  }
   if (source.kind === 'url' && SHALLOW_HOST.test(source.url))
     return refuse(queue, owner, source.url);
   if ('url' in source && BROKEN_HOST.test(source.url))
@@ -108,9 +116,26 @@ async function ingest(
   return write(queue, owner, input);
 }
 
+/** Into kb's quarantine or out of it, as kb moves it (KBC-187). */
+async function move(
+  vault: string,
+  topic: string,
+  { kind, document }: Extract<DocIngestSource, { kind: 'remove' | 'restore' }>,
+): Promise<void> {
+  const inside = join(vault, topic, document);
+  const apart = join(
+    vault,
+    topic,
+    document.replace(/^raw\//, 'raw/_quarantine/'),
+  );
+  const [from, to] = kind === 'remove' ? [inside, apart] : [apart, inside];
+  await mkdir(dirname(to), { recursive: true });
+  await rename(from, to);
+}
+
 /** kb's quarantine for a page with nothing to read: a person decides (KBC-009). */
 const refuse = (
-  queue: DocIngestQueue,
+  queue: DocIngestWork,
   owner: Owner,
   link: string,
 ): Promise<void> =>
@@ -129,7 +154,7 @@ const refuse = (
     spendUsd: 0,
   });
 
-const broken = (queue: DocIngestQueue, owner: Owner): Promise<void> =>
+const broken = (queue: DocIngestWork, owner: Owner): Promise<void> =>
   queue.complete(owner, {
     ...owner,
     outcome: {
@@ -149,7 +174,7 @@ const entriesOf = (link: string) =>
   }));
 
 async function bringSound(
-  queue: DocIngestQueue,
+  queue: DocIngestWork,
   owner: Owner,
   link: string,
 ): Promise<void> {
@@ -162,7 +187,7 @@ async function bringSound(
 }
 
 async function write(
-  queue: DocIngestQueue,
+  queue: DocIngestWork,
   owner: Owner,
   { job, vault }: { job: DocIngestJob; vault: string },
 ): Promise<void> {
@@ -206,7 +231,7 @@ function toneOf(link: string): Buffer {
 
 /** What kb-map convert would leave in the vault for the job's file or link. */
 async function converted(
-  queue: DocIngestQueue,
+  queue: DocIngestWork,
   { job, vault }: { job: DocIngestJob; vault: string },
 ): Promise<{ id: string; title: string }> {
   const { source } = job;
@@ -216,7 +241,8 @@ async function converted(
       job.topic,
       `https://raso.example/${source.document.slice(QUARANTINE.length, -'.md'.length)}`,
     );
-  if (source.kind !== 'file') return writePage(vault, job.topic, source.url);
+  if ('url' in source) return writePage(vault, job.topic, source.url);
+  if (source.kind !== 'file') throw new Error(`${source.kind} writes nothing`);
   const owner = { jobId: job.id, worker: WORKER, leaseId: job.leaseId };
   const bytes = await readFile((await queue.fileOf(owner)).path);
   return writeUpload(vault, job.topic, { name: source.name, bytes });

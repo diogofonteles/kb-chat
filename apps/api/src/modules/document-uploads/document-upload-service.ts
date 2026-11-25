@@ -68,6 +68,8 @@ export interface DocumentUploadServiceDeps {
   ) => ExistingDocument | null;
   /** The document is in the app's catalog (the sync brought it): the upload is "pronto". */
   readonly inCatalog: (topic: string, id: string) => boolean;
+  /** It was taken out of the collection (KBC-187). */
+  readonly isRemoved?: (topic: string, id: string) => boolean;
   /** Where a recording link's media item is now. */
   readonly mediaProgressOf?: (mediaId: string) => MediaProgress | null;
   /** The Mac that publishes to the collections: paired, seen in the last minutes, or not. */
@@ -259,6 +261,12 @@ export class DocumentUploadService {
     if (record.state === 'failed' || record.state === 'receiving') return false;
     // Taken off the list before it entered: it was cancelled.
     if (record.dismissed && !ENTERED.has(record.state)) return false;
+    // Removed from the collection, what it was made of may be sent again (KBC-187 BR-6).
+    if (
+      record.document &&
+      this.deps.isRemoved?.(record.topic, record.document.id)
+    )
+      return false;
     if (!record.mediaId || !this.deps.mediaProgressOf) return true;
     return this.mediaOf(record)?.state !== 'failed';
   }
@@ -628,6 +636,27 @@ export class DocumentUploadService {
       ...ready.map((one) => ({ ...one, dismissed: true })),
     );
     return ready.length;
+  }
+
+  /** The collection it was sent to; undefined for what was not sent from the app. */
+  topicOf(id: string): string | undefined {
+    return this.deps.records.get(id)?.topic;
+  }
+
+  /** It was taken out of the collection: what sent it there leaves the list. */
+  async documentLeft(topic: string, documentId: string): Promise<void> {
+    const sent = this.deps.records
+      .all()
+      .filter(
+        (one) =>
+          one.topic === topic &&
+          one.document?.id === documentId &&
+          !one.dismissed,
+      );
+    if (sent.length > 0)
+      await this.deps.records.put(
+        ...sent.map((one) => ({ ...one, dismissed: true })),
+      );
   }
 
   /** Everything a view is told of besides its own item, read once for a whole list. */

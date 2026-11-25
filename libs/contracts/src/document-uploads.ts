@@ -410,6 +410,10 @@ export const docIngestSourceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('url'), url: z.string() }),
   /** A person said it enters all the same: kb takes it out of its quarantine (KBC-009). */
   z.object({ kind: z.literal('accept'), document: z.string() }),
+  /** A master took it out of the collection: kb moves it to its quarantine (KBC-187). */
+  z.object({ kind: z.literal('remove'), document: z.string() }),
+  /** And brought it back. */
+  z.object({ kind: z.literal('restore'), document: z.string() }),
   /** Downloaded on the Mac and given back as audio to `audioPath` (POST, octet-stream). */
   z.object({
     kind: z.literal('recording'),
@@ -479,6 +483,8 @@ export const docIngestResultRequestSchema = docLeaseSchema.extend({
       state: z.literal('duplicate'),
       document: uploadedDocumentRefSchema,
     }),
+    /** Of `remove` and `restore`: it is where it was asked to be. */
+    z.object({ state: z.literal('moved') }),
     z.object({
       state: z.literal('failed'),
       failure: documentUploadFailureSchema.exclude([

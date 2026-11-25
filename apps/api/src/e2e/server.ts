@@ -5,7 +5,12 @@ import { registerDiarizationSeed } from './diarization-seed-routes.js';
 import { registerProposalSeed } from './proposal-seed-routes.js';
 import { registerKbPublishMac } from './kb-publish-routes.js';
 import { registerDocIngestMac } from './doc-ingest-routes.js';
-import type { DocIngestQueue } from '../modules/document-uploads/index.js';
+import { MemoryDocumentRemovalStore } from '../adapters/json-document-removal-store.js';
+import {
+  RemovalRecords,
+  RemovedVault,
+} from '../modules/document-removals/index.js';
+import type { DocIngestWork } from '../modules/document-uploads/index.js';
 import { registerLevelArrivals } from './level-arrival-routes.js';
 import { startMediaWorkers } from './media-worker-runner.js';
 import { privateTemp } from '../../../../tools/test-temp.mjs';
@@ -174,9 +179,10 @@ const logger = createLogger(config.LOG_LEVEL);
 const collections = new CollectionRegistry(
   new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'collections.json')),
 );
-const vault = new CollectionsVault(
-  new FsVaultAdapter(config.KB_VAULT),
-  collections,
+const removals = await RemovalRecords.open(new MemoryDocumentRemovalStore());
+const vault = new RemovedVault(
+  new CollectionsVault(new FsVaultAdapter(config.KB_VAULT), collections),
+  removals,
 );
 const index = await createSearchIndex({ config, vault, log: logger });
 const ledger = new JsonlSpendLedger(
@@ -329,7 +335,7 @@ const media = await createMedia(
   },
 );
 // The fake Mac of sent documents (KBC-149) gets the app's queue once it is built.
-let docIngest: DocIngestQueue | null = null;
+let docIngest: DocIngestWork | null = null;
 const app = await buildApp({
   onDocIngest: (queue) => {
     docIngest = queue;
@@ -350,6 +356,7 @@ const app = await buildApp({
   house,
   webSearch,
   collections,
+  removals,
   authorDirectory,
   levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),
 });

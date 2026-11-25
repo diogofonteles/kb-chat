@@ -57,6 +57,22 @@ export interface DocIngestQueueDeps {
   readonly now?: () => Date;
 }
 
+/** What the Mac's routes and the waker ask of it. */
+export type DocIngestWork = Pick<
+  DocIngestQueue,
+  | 'adopt'
+  | 'complete'
+  | 'fail'
+  | 'fileOf'
+  | 'heartbeat'
+  | 'isHeldBy'
+  | 'isJob'
+  | 'leasableJobs'
+  | 'lease'
+  | 'list'
+  | 'step'
+>;
+
 const leaseLost = () =>
   new AppError('MEDIA_CONFLICT', 'This lease is no longer yours');
 
@@ -432,6 +448,8 @@ function endOf(
         ? { ...outcome.refused, accepted: false }
         : decidedOf(refused),
     };
+  if (outcome.state === 'moved')
+    throw new AppError('VALIDATION_FAILED', 'Not an outcome of a document');
   const repeated = outcome.state === 'duplicate';
   return {
     state: 'mapped',

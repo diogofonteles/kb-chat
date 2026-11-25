@@ -7,6 +7,7 @@ export {
 } from './document-upload-service.js';
 export {
   DocIngestQueue,
+  type DocIngestWork,
   DOC_INGEST_MAX_ATTEMPTS,
   type DocIngestQueueDeps,
 } from './doc-ingest-queue.js';

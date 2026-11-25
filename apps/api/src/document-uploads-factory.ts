@@ -36,6 +36,7 @@ import type {
   CatalogRegistry,
   TopicCatalog,
 } from './modules/catalog/index.js';
+import type { RemovalRecords } from './modules/document-removals/index.js';
 import {
   DocIngestQueue,
   DocumentUploadService,
@@ -59,6 +60,8 @@ export interface DocumentUploadsWiring {
   readonly mediaService: MediaService;
   readonly documents: MediaDocuments;
   readonly people: PeopleService;
+  /** What was taken out of its collection (KBC-187): it may be sent again. */
+  readonly removals: RemovalRecords;
   readonly levels: {
     readonly documents: DocumentLevelsService;
     readonly scaleOf: (
@@ -165,6 +168,7 @@ function uploadService(
     scaleOf: wiring.levels.scaleOf,
     findExisting: (scope, key) => findExisting(catalog, scope, key),
     inCatalog: (topic, id) => catalog.get(topic)?.entries.has(id) === true,
+    isRemoved: (topic, id) => wiring.removals.isRemoved(topic, id),
     mediaProgressOf: (mediaId) => mediaProgressOf(wiring, mediaId),
     mac: () => macNow(wiring.mac),
     monthLeftUsd: () => wiring.documents.kb.budgetUsd(),
