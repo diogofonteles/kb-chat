@@ -101,13 +101,30 @@
           (drop)="dropped($event)"
         >
           <ui-icon name="upload" [size]="32" />
-          <button uiButton="white" type="button" (click)="fileInput.click()">
-            <span i18n="@@addContent.choose">Escolher arquivos</span>
-          </button>
-          <p class="hint" id="add-files-hint" i18n="@@addContent.fileTypes">
+          <div class="pick">
+            <button uiButton="white" type="button" (click)="fileInput.click()">
+              <span i18n="@@addContent.choose">Escolher arquivos</span>
+            </button>
+            @if (picksFolder) {
+              <button
+                uiButton="outline"
+                type="button"
+                (click)="folderInput.click()"
+              >
+                <ui-icon name="folder" [size]="18" />
+                <span i18n="@@addContent.chooseFolder">Escolher pasta</span>
+              </button>
+            }
+          </div>
+          <p class="hint" i18n="@@addContent.fileTypes">
             PDF (também escaneado), Word, PowerPoint, Excel, EPUB, TXT,
-            Markdown, imagem, CSV ou JSON, até 300 MB cada. O original fica
-            guardado.
+            Markdown, imagem, CSV, JSON e áudio. De uma pasta, entra tudo,
+            também das subpastas; o que não puder entrar aparece com o motivo.
+          </p>
+          <p class="status" role="status">
+            @if (reading()) {
+              <span i18n="@@addContent.reading">Lendo a pasta…</span>
+            }
           </p>
           <input
             #fileInput
@@ -119,35 +136,98 @@
             aria-hidden="true"
             (change)="filesChosen($event)"
           />
+          <input
+            #folderInput
+            class="visually-hidden folder-input"
+            type="file"
+            multiple
+            webkitdirectory
+            tabindex="-1"
+            aria-hidden="true"
+            (change)="filesChosen($event)"
+          />
         </div>
-        @if (files().length > 0) {
-          <ul
-            class="rows"
-            aria-label="Arquivos escolhidos"
-            i18n-aria-label="@@addContent.chosen"
+        @if (readFailed()) {
+          <ui-banner
+            tone="err"
+            title="Não consegui ler a pasta inteira"
+            i18n-title="@@addContent.readFailedTitle"
+            role="alert"
           >
-            @for (one of files(); track one.key) {
-              <li class="row">
-                <ui-icon name="file" [size]="20" />
-                <div class="row-text">
-                  <p class="name">{{ one.file.name }}</p>
-                  @if (one.problem) {
-                    <p class="problem">{{ one.problem }}</p>
-                  }
-                </div>
-                <button
-                  uiIconButton
-                  type="button"
-                  [size]="44"
-                  aria-label="Tirar {{ one.file.name }} da lista"
-                  i18n-aria-label="@@addContent.removeFile"
-                  (click)="removeFile(one.key)"
-                >
-                  <ui-icon name="close" [size]="18" />
-                </button>
-              </li>
-            }
-          </ul>
+            <span i18n="@@addContent.readFailed"
+              >Nada dela foi incluído. Tente de novo, ou use Escolher
+              pasta.</span
+            >
+          </ui-banner>
+        }
+        @if (files().length > 0) {
+          <div class="found">
+            <p class="found-text" role="status">
+              <strong i18n="@@addContent.found">{files().length, plural,
+                =1 {1 arquivo encontrado}
+                other {{{ files().length }} arquivos encontrados}
+              }</strong>
+              <span>{{ foundParts() }}</span>
+            </p>
+            <button
+              uiButton="ghost"
+              size="sm"
+              type="button"
+              (click)="clearFiles()"
+            >
+              <span i18n="@@addContent.clear">Limpar</span>
+            </button>
+          </div>
+          @if (left().length > 0) {
+            <details class="left" [open]="left().length <= 5">
+              <summary i18n="@@addContent.leftTitle">
+                Não entram ({{ left().length }})
+              </summary>
+              <ul class="rows">
+                @for (one of left(); track one.key) {
+                  <li class="row">
+                    <div class="row-text">
+                      <p class="name">{{ one.path }}</p>
+                      <p class="problem">{{ one.problem }}</p>
+                    </div>
+                  </li>
+                }
+              </ul>
+            </details>
+          }
+          @if (going().length > 0) {
+            <details class="left" [open]="going().length <= 12">
+              <summary i18n="@@addContent.goingTitle">
+                Vão entrar ({{ going().length }})
+              </summary>
+              <ul
+                class="rows"
+                aria-label="Arquivos escolhidos"
+                i18n-aria-label="@@addContent.chosen"
+              >
+                @for (one of going(); track one.key) {
+                  <li class="row">
+                    <ui-icon
+                      [name]="one.role === 'audio' ? 'music' : 'file'"
+                      [size]="20"
+                    />
+                    <div class="row-text">
+                      <p class="name">{{ one.path }}</p>
+                    </div>
+                    <button
+                      uiIconButton
+                      type="button"
+                      [size]="44"
+                      [attr.aria-label]="removeLabel(one.path)"
+                      (click)="removeFile(one.key)"
+                    >
+                      <ui-icon name="close" [size]="18" />
+                    </button>
+                  </li>
+                }
+              </ul>
+            </details>
+          }
         }
       }
       @case ('links') {
@@ -256,6 +336,28 @@
             }
           </p>
         </div>
+        @if (overCap()) {
+          <ui-banner
+            class="over"
+            tone="warn"
+            title="A estimativa passa do teto"
+            i18n-title="@@addContent.overCapTitle"
+          >
+            <button
+              uiBannerAction
+              uiButton="white"
+              size="sm"
+              type="button"
+              (click)="useEnoughCap()"
+            >
+              <span i18n="@@addContent.useCap">Usar US$ {{ enoughCap() }}</span>
+            </button>
+            <span i18n="@@addContent.overCap"
+              >Com US$ {{ capText() }} parte vai esperar até você
+              aumentar.</span
+            >
+          </ui-banner>
+        }
         <button
           uiButton="primary"
           type="button"
@@ -269,29 +371,7 @@
       </div>
     }
 
-    @if (sender.sends().length > 0) {
-      <section class="group" aria-labelledby="add-sends-title">
-        <h2 id="add-sends-title" i18n="@@addContent.sending">Enviados agora</h2>
-        <ul class="rows">
-          @for (one of sender.sends(); track one.key) {
-            <li>
-              <app-content-send-row
-                [send]="one"
-                (retried)="sender.retry(one.key)"
-                (removed)="sender.remove(one.key)"
-                (opened)="
-                  openDocument({
-                    topic: one.target.topic,
-                    id: $event.id,
-                    title: $event.title,
-                  })
-                "
-              />
-            </li>
-          }
-        </ul>
-      </section>
-    }
+    <app-content-sends (opened)="openDocument($event)" />
 
     @if (uploads.failed()) {
       <ui-banner

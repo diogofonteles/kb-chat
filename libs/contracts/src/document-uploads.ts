@@ -70,6 +70,8 @@ export const documentLinkSchema = z
   .url({ protocol: /^https?$/, hostname: z.regexes.domain })
   .max(2_000)
   .refine((url) => {
+    // The format above refuses it already; this check runs all the same and must not throw.
+    if (!URL.canParse(url)) return true;
     const parsed = new URL(url);
     return parsed.username === '' && parsed.password === '';
   }, 'A link with credentials is refused');
@@ -204,6 +206,8 @@ export const documentUploadSchema = z.object({
   batch: documentBatchSchema.nullable(),
   /** Why it waits although the Mac could take it: a spending ceiling was reached. */
   heldBy: z.enum(['batch-cap', 'month-cap']).nullable(),
+  /** It failed, and the app still has what was sent: it can go again as it is. */
+  retriable: z.boolean(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });

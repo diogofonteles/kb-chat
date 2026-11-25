@@ -201,6 +201,8 @@ export const configSchema = z
     KB_CHAT_MEDIA_WORKER_TOKEN: blankAsUnset(z.string().min(32).optional()),
     /** Media items created per minute per client, until the quotas of KBC-035. */
     MEDIA_CREATE_RATE_LIMIT: z.coerce.number().int().min(1).default(30),
+    /** Documents a person may announce per minute (KBC-184): a folder has hundreds. */
+    DOCUMENT_CREATE_RATE_LIMIT: z.coerce.number().int().min(1).default(300),
     /**
      * The model the app's AI proposes tracks with (KBC-067), on the house OpenRouter account
      * a master connected (ADR 0016); KBC-063 measured DeepSeek V4 Flash at US$ 0.005/h.

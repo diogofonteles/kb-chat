@@ -255,7 +255,8 @@ export class DocIngestQueue {
       updatedAt: this.now().toISOString(),
     });
     if (result.spendUsd > 0) this.deps.book?.(record, result.spendUsd);
-    await this.deps.files.remove(record.id);
+    // A failed one keeps its file for a while: the person may send it again as it is.
+    if (outcome.state !== 'failed') await this.deps.files.remove(record.id);
     if (outcome.state === 'ready') this.deps.written?.(record.topic);
   }
 
@@ -327,7 +328,6 @@ export class DocIngestQueue {
       lease: null,
       updatedAt: this.now().toISOString(),
     });
-    await this.deps.files.remove(record.id);
   }
 }
 

@@ -17,6 +17,8 @@ export interface UploadContext {
   readonly batch: DocumentBatch | null;
   /** The spending ceiling that makes it wait, if any (KBC-009 R3). */
   readonly heldBy: DocumentUpload['heldBy'];
+  /** A link, or a file whose bytes are still here: it can go again. */
+  readonly kept: boolean;
 }
 
 /** The contract's view: the Mac's words only for masters (they may name paths and keys). */
@@ -40,6 +42,7 @@ export function toDocumentUpload(
     uploadUrl: record.state === 'receiving' ? uploadUrlOf(record.id) : null,
     batch: input.batch,
     heldBy: record.state === 'received' ? input.heldBy : null,
+    retriable: record.state === 'failed' && input.kept,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };

@@ -13,15 +13,19 @@ import type {
   UploadedDocumentRef,
 } from '@kb-chat/contracts';
 import { errorMessage, toUiErrorCode } from '@core/api/api-error.js';
+import { MediaApi, type UploadEvent } from '@core/media/media-api.js';
 import { DocumentUploadsApi } from '@core/documents/document-uploads-api.js';
 import { hashFile } from '@features/media/file-hash.js';
+import { titleFromFileName } from '@features/media/upload-rules.js';
 import {
   EMPTY,
   Subject,
   catchError,
   concatMap,
   defer,
+  filter,
   map,
+  of,
   retry,
   throwError,
   timer,
@@ -29,7 +33,8 @@ import {
 } from 'rxjs';
 
 export type ContentSource =
-  | { readonly kind: 'file'; readonly file: File }
+  | { readonly kind: 'file'; readonly file: File; readonly path: string }
+  | { readonly kind: 'audio'; readonly file: File; readonly path: string }
   | { readonly kind: 'url'; readonly url: string };
 
 /** Where an item's send is; one at a time (PD-05: a union, never two flags). */
@@ -60,14 +65,41 @@ export interface ContentSend {
   readonly phase: SendPhase;
 }
 
-/** The API's per-minute limit: the item waits and goes again, the person does nothing. */
-const RATE_LIMIT_WAIT_MS = 15_000;
-const RATE_LIMIT_TRIES = 8;
+/** The API's per-minute limit, or no network: the item waits and goes again by itself. */
+const WAIT_MS = 15_000;
+const TRIES = 20;
+const PASSING = new Set(['RATE_LIMITED', 'OFFLINE']);
+
+/** How a folder's send stands: every item is in one of them, so the sum always closes. */
+export interface SendSummary {
+  readonly total: number;
+  readonly active: number;
+  readonly sent: number;
+  readonly already: number;
+  readonly failed: number;
+}
 
 const ACTIVE = new Set<SendPhase['kind']>(['waiting', 'hashing', 'sending']);
 
 const nameOf = (source: ContentSource): string =>
-  source.kind === 'file' ? source.file.name : source.url;
+  source.kind === 'url' ? source.url : source.path;
+
+const ALREADY: SendPhase = {
+  kind: 'duplicate',
+  document: null,
+  onItsWay: false,
+};
+
+const percentOf = (loaded: number, total: number): number =>
+  Math.floor((loaded / Math.max(total, 1)) * 100);
+
+/** What passes by itself (the limit per minute, the network) is tried again after a wait. */
+const again = <T>() =>
+  retry<T>({
+    count: TRIES,
+    delay: (err: unknown) =>
+      PASSING.has(toUiErrorCode(err)) ? timer(WAIT_MS) : throwError(() => err),
+  });
 
 /**
  * Sends what the person included (KBC-184), one item after the other: a file is hashed in the
@@ -77,6 +109,7 @@ const nameOf = (source: ContentSource): string =>
 @Injectable()
 export class ContentSender {
   private readonly api = inject(DocumentUploadsApi);
+  private readonly media = inject(MediaApi);
   private readonly line = new Subject<number>();
   private readonly entries = signal<readonly ContentSend[]>([]);
   private lastKey = 0;
@@ -86,10 +119,19 @@ export class ContentSender {
   readonly busy = computed(() =>
     this.entries().some((one) => ACTIVE.has(one.phase.kind)),
   );
-  /** Items the API has: the list of what is being processed reads again on each. */
-  readonly sentCount = computed(
-    () => this.entries().filter((one) => one.phase.kind === 'sent').length,
-  );
+  /** Where everything is; `total` is always the sum of the others. */
+  readonly summary = computed<SendSummary>(() => {
+    const kinds = this.entries().map((one) => one.phase.kind);
+    const of = (kind: SendPhase['kind']) =>
+      kinds.filter((one) => one === kind).length;
+    return {
+      total: kinds.length,
+      active: kinds.filter((one) => ACTIVE.has(one)).length,
+      sent: of('sent'),
+      already: of('duplicate'),
+      failed: of('error'),
+    };
+  });
 
   constructor() {
     this.line
@@ -129,6 +171,20 @@ export class ContentSender {
     this.line.next(key);
   }
 
+  retryFailed(): void {
+    for (const { key, phase } of this.entries())
+      if (phase.kind === 'error') this.retry(key);
+  }
+
+  /** What ended well leaves the list; what failed or is on its way stays. */
+  clearDone(): void {
+    this.entries.update((all) =>
+      all.filter(
+        ({ phase }) => phase.kind === 'error' || ACTIVE.has(phase.kind),
+      ),
+    );
+  }
+
   /** Takes an item off the list: one that did not start never goes. */
   remove(key: number): void {
     const kind = this.entryOf(key)?.phase.kind;
@@ -150,9 +206,11 @@ export class ContentSender {
     return defer(() => {
       const entry = this.entryOf(key);
       if (!entry) return EMPTY;
-      return entry.source.kind === 'file'
-        ? this.sendFile(entry, entry.source.file)
-        : this.sendLink(entry, entry.source.url);
+      const { source } = entry;
+      if (source.kind === 'url') return this.sendLink(entry, source.url);
+      return source.kind === 'audio'
+        ? this.sendAudio(entry, source.file)
+        : this.sendFile(entry, source.file);
     });
   }
 
@@ -164,20 +222,86 @@ export class ContentSender {
   }
 
   private sendFile(entry: ContentSend, file: File): Observable<unknown> {
-    this.put(entry.key, { kind: 'hashing', percent: 0 });
-    return hashFile(file).pipe(
-      concatMap((event) => {
-        if (event.kind === 'progress') {
-          this.put(entry.key, { kind: 'hashing', percent: event.percent });
-          return EMPTY;
-        }
-        return this.create(entry, {
+    return this.hashed(entry.key, file).pipe(
+      concatMap((sha256) =>
+        this.create(entry, {
           ...{ kind: 'file', name: file.name, bytes: file.size },
-          sha256: event.sha256,
-        });
-      }),
+          sha256,
+        }),
+      ),
       concatMap((answer) => this.sendBytes(entry.key, answer, file)),
     );
+  }
+
+  /** The file's hash, its progress on the item's line. */
+  private hashed(key: number, file: File): Observable<string> {
+    this.put(key, { kind: 'hashing', percent: 0 });
+    return hashFile(file).pipe(
+      filter((event) => {
+        if (event.kind === 'progress')
+          this.put(key, { kind: 'hashing', percent: event.percent });
+        return event.kind === 'done';
+      }),
+      map((event) => (event.kind === 'done' ? event.sha256 : '')),
+    );
+  }
+
+  /** A recording goes to the library (KBC-035) and is transcribed; one stopped goes on. */
+  private sendAudio(entry: ContentSend, file: File): Observable<unknown> {
+    const { key, target } = entry;
+    return this.hashed(key, file).pipe(
+      concatMap((sha256) =>
+        this.media
+          .check(target.topic, { sha256, bytes: file.size, durationMs: null })
+          .pipe(
+            again(),
+            concatMap((check) => {
+              if (
+                check.verdict === 'duplicate' ||
+                check.verdict === 'duplicate-hidden'
+              ) {
+                this.put(key, ALREADY);
+                return EMPTY;
+              }
+              return check.verdict === 'resume'
+                ? of(check.media.id)
+                : this.createAudio(entry, { file, sha256 });
+            }),
+          ),
+      ),
+      concatMap((id) => {
+        this.put(key, { kind: 'sending', percent: 0 });
+        return this.media.upload(id, file);
+      }),
+      map((event) => this.followAudio(key, event)),
+    );
+  }
+
+  private createAudio(
+    { target }: ContentSend,
+    { file, sha256 }: { readonly file: File; readonly sha256: string },
+  ): Observable<string> {
+    const request = {
+      title: titleFromFileName(file.name),
+      author: null,
+      fileName: file.name,
+      bytes: file.size,
+      sha256,
+      ...(target.level !== null && { level: target.level }),
+    };
+    return this.media.create(target.topic, request).pipe(
+      again(),
+      map((item) => item.id),
+    );
+  }
+
+  private followAudio(key: number, event: UploadEvent): void {
+    if (event.kind === 'done') this.put(key, { kind: 'sent' });
+    else if (event.kind === 'progress')
+      this.put(key, {
+        kind: 'sending',
+        percent: percentOf(event.loaded, event.total),
+      });
   }
 
   private create(
@@ -192,15 +316,7 @@ export class ContentSender {
       ...(level !== null && { level }),
       batch,
     };
-    return this.api.create(topic, request).pipe(
-      retry({
-        count: RATE_LIMIT_TRIES,
-        delay: (err: unknown) =>
-          toUiErrorCode(err) === 'RATE_LIMITED'
-            ? timer(RATE_LIMIT_WAIT_MS)
-            : throwError(() => err),
-      }),
-    );
+    return this.api.create(topic, request).pipe(again());
   }
 
   /** The bytes of a new upload, with the progress on screen; none for a duplicate. */
@@ -220,20 +336,23 @@ export class ContentSender {
             ? { kind: 'sent' }
             : {
                 kind: 'sending',
-                percent: Math.floor(
-                  (event.loaded / Math.max(event.total, 1)) * 100,
-                ),
+                percent: percentOf(event.loaded, event.total),
               },
         ),
       ),
     );
   }
 
-  /** A duplicate is said; a new upload is sent (a link) or has its bytes to send. */
+  /**
+   * A duplicate is said; a new upload is sent (a link) or has its bytes to send. One that
+   * stopped half-way (the tab closed) goes on from where the server has it (ADR 0033).
+   */
   private answered(
     key: number,
     answer: CreateDocumentUploadResponse,
   ): string | null {
+    if (answer.outcome === 'duplicate' && answer.upload?.uploadUrl)
+      return answer.upload.uploadUrl;
     if (answer.outcome === 'duplicate') {
       this.put(key, {
         kind: 'duplicate',

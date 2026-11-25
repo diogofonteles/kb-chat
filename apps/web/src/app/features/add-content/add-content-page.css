@@ -99,6 +99,67 @@
   background: var(--overlay-2);
 }
 
+.pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.pick button {
+  min-height: 2.75rem;
+}
+
+.status {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.status:empty {
+  display: none;
+}
+
+.found {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.found button {
+  min-height: 2.75rem;
+}
+
+.found-text {
+  display: grid;
+  gap: 0.125rem;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.found-text span {
+  color: var(--color-text-muted);
+}
+
+.left summary {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.left .rows {
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.over {
+  grid-column: 1 / -1;
+}
+
 .rows {
   display: grid;
   gap: var(--space-1);

@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CreateDocumentUploadResponse } from '@kb-chat/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -358,6 +358,7 @@ describe('Sending documents and links from the app (KBC-149)', () => {
       { kind: 'url', url: 'file:///etc/passwd' },
       { kind: 'url', url: 'https://user:pw@example.org/x' },
       { kind: 'url', url: 'javascript:alert(1)' },
+      { kind: 'url', url: 'não é um endereço' },
     ])
       expect((await ana.call('POST', DOCUMENTS, body)).statusCode).toBe(400);
   });
@@ -504,6 +505,54 @@ describe('One inclusion and its ceiling (KBC-009 R2, R3)', () => {
           })
         ).statusCode,
       ).toBe(400);
+  });
+
+  it('a failed file goes again as it was sent; once its bytes are gone it does not', async () => {
+    const { media, ana } = await world();
+    const sent = await sentFile(media, ana);
+    const url = `${UPLOADS}/${sent.id}/retry`;
+    expect((await ana.call('POST', url)).statusCode).toBe(409);
+    const mac = await docMac(media);
+    await docResult(media, {
+      token: mac.token,
+      job: await leaseDoc(media, mac.token),
+      outcome: { state: 'failed', failure: 'empty', detail: 'nothing' },
+    });
+    expect((await uploadsOf(ana.call))[0]).toMatchObject({
+      state: 'failed',
+      retriable: true,
+    });
+    const again = await ana.call('POST', url);
+    expect(again.statusCode, again.body).toBe(200);
+    expect(again.json()).toMatchObject({ state: 'received', failure: null });
+    const job = await leaseDoc(media, mac.token);
+    expect(job).toMatchObject({ id: sent.id, attempt: 1 });
+    const file = await asMac(media, mac.token, {
+      method: 'GET',
+      url: `/api/v1/media-worker/jobs/${job.id}/document?leaseId=${job.leaseId}`,
+    });
+    expect(file.rawPayload.equals(PDF)).toBe(true);
+    await docResult(media, {
+      token: mac.token,
+      job,
+      outcome: { state: 'failed', failure: 'empty', detail: 'nothing' },
+    });
+    await rm(join(media.started.state, 'document-uploads'), {
+      recursive: true,
+    });
+    expect((await uploadsOf(ana.call))[0]).toMatchObject({ retriable: false });
+    expect((await ana.call('POST', url)).statusCode).toBe(409);
+  });
+
+  it('a folder of more than 100 files is announced without stopping at the audio limit', async () => {
+    const { ana } = await world();
+    const answers = [];
+    for (let n = 0; n < 120; n += 1)
+      answers.push(
+        (await link(ana.call, `https://example.org/${n}`)).statusCode,
+      );
+    expect(new Set(answers)).toEqual(new Set([201]));
+    expect(await uploadsOf(ana.call)).toHaveLength(120);
   });
 
   it('an item is taken out before the Mac has it; while it works, 409; the document stays', async () => {

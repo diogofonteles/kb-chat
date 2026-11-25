@@ -54,8 +54,6 @@ export interface DocumentUploadsWiring {
       topic: string,
     ) => readonly { id: string; code: string }[];
   };
-  /** Uploads per person per minute (the media library's own limit). */
-  readonly createPerMinute?: number;
 }
 
 /**
@@ -75,9 +73,7 @@ export async function registerDocumentUploads(
     documentUploadRoutes({
       service: uploadService(wiring, { records, files }),
       actorOf: (request) => uploadActorOf(request, wiring.catalog),
-      ...(wiring.createPerMinute && {
-        createPerMinute: wiring.createPerMinute,
-      }),
+      createPerMinute: wiring.config.DOCUMENT_CREATE_RATE_LIMIT,
     }),
   );
   return ingestQueue(app, wiring, { records, files });

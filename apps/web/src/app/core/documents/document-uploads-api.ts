@@ -65,6 +65,11 @@ export class DocumentUploadsApi {
       .pipe(map((body) => documentBatchSchema.parse(body)));
   }
 
+  /** A failed item goes again as it was sent. */
+  retry(id: string): Observable<unknown> {
+    return this.http.post(`${documentUploadsUrl()}/${id}/retry`, {});
+  }
+
   /** Cancels an item the Mac does not have, or takes one that ended off the list. */
   remove(id: string): Observable<unknown> {
     return this.http.delete(`${documentUploadsUrl()}/${id}`);

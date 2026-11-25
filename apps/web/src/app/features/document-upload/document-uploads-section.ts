@@ -7,6 +7,7 @@ import {
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import {
   DOCUMENT_BATCH_MAX_USD,
@@ -20,6 +21,9 @@ import {
   WAITING_HINTS,
   isWorking,
 } from './upload-labels.js';
+
+/** Rows shown before "Ver os outros". */
+const FIRST_ROWS = 30;
 
 /** A document opened from the list. */
 export interface OpenedDocument {
@@ -53,7 +57,7 @@ export interface OpenedDocument {
           </ui-banner>
         }
         <ul class="rows">
-          @for (row of rows(); track row.upload.id) {
+          @for (row of shown(); track row.upload.id) {
             <li class="row">
               <span class="art" aria-hidden="true">
                 <ui-icon [name]="row.icon" [size]="20" />
@@ -129,6 +133,24 @@ export interface OpenedDocument {
             </li>
           }
         </ul>
+        @if (hidden() > 0 || all()) {
+          <button
+            uiButton="ghost"
+            size="sm"
+            type="button"
+            class="more"
+            [attr.aria-expanded]="all()"
+            (click)="all.set(!all())"
+          >
+            @if (all()) {
+              <span i18n="@@docUploads.fewer">Mostrar menos</span>
+            } @else {
+              <span i18n="@@docUploads.others"
+                >Ver os outros {{ hidden() }}</span
+              >
+            }
+          </button>
+        }
       </section>
     }
   `,
@@ -144,6 +166,7 @@ export class DocumentUploadsSection {
   readonly titles = input<ReadonlyMap<string, string>>(new Map());
   readonly documentOpened = output<OpenedDocument>();
 
+  protected readonly all = signal(false);
   protected readonly rows = computed(() => {
     const topic = this.topic();
     return this.store
@@ -151,6 +174,14 @@ export class DocumentUploadsSection {
       .filter((upload) => topic === null || upload.topic === topic)
       .map((upload) => this.rowOf(upload, topic === null));
   });
+
+  /** A folder sends hundreds: the first ones, and the rest one press away. */
+  protected readonly shown = computed(() =>
+    this.all() ? this.rows() : this.rows().slice(0, FIRST_ROWS),
+  );
+  protected readonly hidden = computed(
+    () => this.rows().length - this.shown().length,
+  );
 
   private rowOf(upload: DocumentUpload, namesTopic: boolean) {
     const label = STATE_LABELS[upload.state];
@@ -169,7 +200,7 @@ export class DocumentUploadsSection {
         upload.heldBy === 'batch-cap' &&
         upload.batch !== null &&
         upload.batch.capUsd < DOCUMENT_BATCH_MAX_USD,
-      canRetry: upload.state === 'failed' && upload.kind !== 'file',
+      canRetry: upload.retriable,
       canRemove: !isWorking(upload.state),
       removeLabel: $localize`:@@docUploads.remove:Tirar ${upload.name}:name: da lista`,
     };

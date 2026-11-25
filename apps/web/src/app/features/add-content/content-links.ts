@@ -16,9 +16,20 @@ export interface ParsedLinks {
 /** The most links one inclusion takes (the ceiling bounds the rest). */
 export const MAX_LINKS = 50;
 
-/** One address per line (spaces and commas too); a repeated one counts once. */
+/**
+ * One address per line; several on one line (spaces, commas) count each. A line with no
+ * address in it is refused whole, as typed; a repeated address counts once.
+ */
 export function parseLinks(text: string): ParsedLinks {
-  const parts = text.split(/[\s,;]+/).filter((part) => part !== '');
+  const parts = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .flatMap((line) =>
+      /https?:\/\//i.test(line)
+        ? line.split(/[\s,;]+/).filter(Boolean)
+        : [line],
+    );
   const links = new Map<string, ContentLink>();
   const refused: string[] = [];
   for (const part of new Set(parts)) {

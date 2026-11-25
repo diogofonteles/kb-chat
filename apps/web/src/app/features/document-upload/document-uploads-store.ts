@@ -94,12 +94,9 @@ export class DocumentUploadsStore {
     this.act(upload.id, this.api.changeBatch(batch.id, capUsd));
   }
 
-  /** A link that failed is sent again, as a new inclusion, and leaves the failed one. */
+  /** A failed item goes again as it was sent. */
   retry(upload: DocumentUpload): void {
-    const again = this.api
-      .create(upload.topic, { kind: 'url', url: upload.name })
-      .pipe(concatMap(() => this.api.remove(upload.id)));
-    this.act(upload.id, again);
+    this.act(upload.id, this.api.retry(upload.id));
   }
 
   private list(): Observable<DocumentUpload[]> {

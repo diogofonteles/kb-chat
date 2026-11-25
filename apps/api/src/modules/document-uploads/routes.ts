@@ -4,6 +4,7 @@ import {
   createDocumentUploadResponseSchema,
   documentBatchSchema,
   documentUploadListSchema,
+  documentUploadSchema,
   topicSlugSchema,
 } from '@kb-chat/contracts';
 import type {
@@ -118,7 +119,12 @@ const REMOVE_OPTIONS = {
   schema: { params: uploadParams, response: { 204: z.undefined() } },
 };
 
-/** An inclusion's ceiling, and an item taken out (KBC-009 R3). */
+const RETRY_OPTIONS = {
+  config: { access: UPLOAD },
+  schema: { params: uploadParams, response: { 200: documentUploadSchema } },
+};
+
+/** An inclusion's ceiling, an item sent again and an item taken out (KBC-009 R3). */
 function registerChanges(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
   const typed = app.withTypeProvider<ZodTypeProvider>();
   typed.patch('/api/v1/document-batches/:id', BATCH_OPTIONS, async (request) =>
@@ -127,6 +133,12 @@ function registerChanges(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
       request.params.id,
       request.body.capUsd,
     ),
+  );
+  typed.post(
+    '/api/v1/document-uploads/:id/retry',
+    RETRY_OPTIONS,
+    async (request) =>
+      deps.service.retry(deps.actorOf(request), request.params.id),
   );
   typed.delete(
     '/api/v1/document-uploads/:id',

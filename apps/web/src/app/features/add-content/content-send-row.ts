@@ -42,6 +42,7 @@ const LABELS: Record<
     tone: 'err',
   },
 };
+const ICONS = { file: 'file', audio: 'music', url: 'link' } as const;
 const ON_ITS_WAY = $localize`:@@addContent.phase.onItsWay:Já está a caminho`;
 
 /** One item of "Enviados agora" (KBC-184): how far it got, and what can be done about it. */
@@ -85,8 +86,7 @@ const ON_ITS_WAY = $localize`:@@addContent.phase.onItsWay:Já está a caminho`;
         uiIconButton
         type="button"
         [size]="44"
-        aria-label="Tirar {{ send().name }} da lista"
-        i18n-aria-label="@@addContent.removeSend"
+        [attr.aria-label]="removeLabel()"
         (click)="removed.emit()"
       >
         <ui-icon name="close" [size]="18" />
@@ -132,9 +132,11 @@ export class ContentSendRow {
   readonly opened = output<UploadedDocumentRef>();
 
   private readonly phase = computed(() => this.send().phase);
-  protected readonly icon = computed(() =>
-    this.send().source.kind === 'file' ? ('file' as const) : ('link' as const),
+  protected readonly removeLabel = computed(
+    () =>
+      $localize`:@@addContent.remove:Tirar ${this.send().name}:name: da lista`,
   );
+  protected readonly icon = computed(() => ICONS[this.send().source.kind]);
   protected readonly tone = computed(() => LABELS[this.phase().kind].tone);
   protected readonly label = computed(() => {
     const phase = this.phase();

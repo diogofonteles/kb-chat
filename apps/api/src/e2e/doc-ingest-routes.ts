@@ -81,6 +81,8 @@ async function ingest(
     });
     return;
   }
+  if (job.collection)
+    await makeTopic(vault, { slug: job.topic, title: job.collection.title });
   for (const state of ['classifying', 'mapping'] as const)
     await queue.step(owner, { ...owner, state });
   const document = await converted(queue, { job, vault });
@@ -144,6 +146,18 @@ async function writePage(
   const page = `---\ntitle: "${title}"\ntype: source\nsource_path: "${url}"\nconverter: firecrawl\n---\n\n# ${title}\n\nTexto da página.\n`;
   await put(folder, resolve(folder, id), page);
   return { id, title };
+}
+
+/** `kb topic new`, as the Mac runs it for a collection made on the screen (KBC-009 R2). */
+async function makeTopic(
+  vault: string,
+  topic: { slug: string; title: string },
+): Promise<void> {
+  const folder = resolve(vault, topic.slug);
+  const file = resolve(folder, 'topic.yaml');
+  if (await readFile(file).catch(() => null)) return;
+  const yaml = `slug: ${topic.slug}\ntitle: "${topic.title}"\ndomain: geral\nmode: wiki\n`;
+  await put(folder, file, yaml);
 }
 
 async function put(folder: string, file: string, data: string | Buffer) {

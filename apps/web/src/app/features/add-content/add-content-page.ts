@@ -36,13 +36,18 @@ import { UiBanner, UiButton, UiChip, UiIcon, UiIconButton } from '@ui/index.js';
 import type { IconName } from '@ui/icons.js';
 import { map } from 'rxjs';
 import {
-  DOCUMENT_ACCEPT,
-  fileProblem,
+  FILE_ACCEPT,
+  canPickFolder,
+  droppedFiles,
+  pickedOf,
+  sortFile,
   type ChosenFile,
+  type FileRole,
+  type PickedFile,
 } from './content-files.js';
 import { MAX_LINKS, parseLinks } from './content-links.js';
 import { ContentSender, type ContentSource } from './content-sender.js';
-import { ContentSendRow } from './content-send-row.js';
+import { ContentSends } from './content-sends.js';
 
 type Way = 'files' | 'links' | 'media';
 
@@ -74,6 +79,23 @@ const WAYS: readonly {
  */
 export const ESTIMATED_USD_PER_DOCUMENT = 0.003;
 
+const documentsText = (n: number): string =>
+  n === 1
+    ? $localize`:@@addContent.oneDocument:1 documento`
+    : $localize`:@@addContent.documents:${n}:count: documentos`;
+const audiosText = (n: number): string =>
+  n === 1
+    ? $localize`:@@addContent.oneAudio:1 áudio`
+    : $localize`:@@addContent.audios:${n}:count: áudios`;
+const leftText = (n: number): string =>
+  n === 1
+    ? $localize`:@@addContent.oneLeft:1 não entra`
+    : $localize`:@@addContent.leftCount:${n}:count: não entram`;
+
+/** The same file chosen twice (alone and in its folder too) stays once. */
+const identityOf = ({ file, path }: PickedFile): string =>
+  [path, file.size, file.lastModified].join('|');
+
 const rootIn = (topics: readonly Topic[], slug: string): string =>
   topics.find((one) => one.slug === slug)?.parent ?? slug;
 
@@ -87,7 +109,7 @@ const rootIn = (topics: readonly Topic[], slug: string): string =>
   imports: [
     RouterLink,
     CollectionDialog,
-    ContentSendRow,
+    ContentSends,
     DocumentUploadsSection,
     LevelField,
     UiBanner,
@@ -115,7 +137,8 @@ export class AddContentPage {
     viewChild.required<ElementRef<HTMLElement>>('heading');
 
   protected readonly ways = WAYS;
-  protected readonly accept = DOCUMENT_ACCEPT;
+  protected readonly accept = FILE_ACCEPT;
+  protected readonly picksFolder = canPickFolder();
   protected readonly treeTitle = treeTitle;
   protected readonly levelLabel = $localize`:@@media.level.label:Nível`;
   protected readonly capMin = DOCUMENT_BATCH_MIN_USD;
@@ -182,15 +205,45 @@ export class AddContentPage {
       : null;
   });
 
-  protected readonly goodFiles = computed(() =>
-    this.files().filter((one) => one.problem === ''),
+  /** A dropped folder is being read: its files come together, at the end. */
+  protected readonly reading = signal(false);
+  protected readonly readFailed = signal(false);
+  protected readonly going = computed(() =>
+    this.files().filter(({ role }) => role === 'document' || role === 'audio'),
   );
+  /** What was found and does not go, each with why: nothing is left out in silence. */
+  protected readonly left = computed(() =>
+    this.files().filter(({ role }) => role === 'refused' || role === 'ignored'),
+  );
+  protected readonly tally = computed(() => {
+    const of = (role: FileRole) =>
+      this.files().filter((one) => one.role === role).length;
+    return { documents: of('document'), audios: of('audio') };
+  });
+  /** "110 documentos · 12 áudios · 6 não entram": only what there is. */
+  protected readonly foundParts = computed(() => {
+    const { documents, audios } = this.tally();
+    const left = this.left().length;
+    const parts = [
+      { n: documents, text: documentsText(documents) },
+      { n: audios, text: audiosText(audios) },
+      { n: left, text: leftText(left) },
+    ];
+    return parts
+      .filter(({ n }) => n > 0)
+      .map(({ text }) => text)
+      .join(' · ');
+  });
   protected readonly count = computed(() =>
     this.way() === 'files'
-      ? this.goodFiles().length
+      ? this.going().length
       : this.way() === 'links'
         ? this.parsed().links.length
         : 0,
+  );
+  /** Only a document is judged on the house's key; an audio is transcribed on the Mac. */
+  private readonly judged = computed(() =>
+    this.way() === 'files' ? this.tally().documents : this.count(),
   );
   protected readonly levelInvalid = computed(
     () =>
@@ -213,10 +266,26 @@ export class AddContentPage {
       ? $localize`:@@addContent.includeOne:Incluir 1 item`
       : $localize`:@@addContent.includeMany:Incluir ${count}:count: itens`;
   });
+  private readonly estimateUsd = computed(() =>
+    this.judged() === 0
+      ? 0
+      : Math.max(this.judged() * ESTIMATED_USD_PER_DOCUMENT, 0.01),
+  );
   protected readonly estimate = computed(() => {
-    const cost = this.count() * ESTIMATED_USD_PER_DOCUMENT;
-    return formatNumber(Math.max(cost, 0.01), this.locale, '1.2-2');
+    return formatNumber(this.estimateUsd(), this.locale, '1.2-2');
   });
+  /** The whole inclusion would not fit in the ceiling: said before, not in the middle. */
+  protected readonly overCap = computed(() => {
+    const cap = this.capUsd();
+    return cap !== null && this.estimateUsd() > cap;
+  });
+  protected readonly enoughCap = computed(() =>
+    formatNumber(
+      Math.min(Math.ceil(this.estimateUsd() * 10) / 10, DOCUMENT_BATCH_MAX_USD),
+      this.locale,
+      '1.2-2',
+    ),
+  );
 
   constructor() {
     // DOM only: the page's own title takes the focus, as the other pages do.
@@ -225,7 +294,7 @@ export class AddContentPage {
     );
     // What was just sent shows up in "Em processamento" without waiting for the next beat.
     effect(() => {
-      if (this.sender.sentCount() > 0) this.uploads.refresh();
+      if (this.sender.summary().sent > 0) this.uploads.refresh();
     });
   }
 
@@ -244,24 +313,51 @@ export class AddContentPage {
 
   protected filesChosen(event: Event): void {
     const input = event.target as HTMLInputElement;
-    this.take(input.files);
-    // The same file can be chosen again after it was taken off the list.
+    this.take(pickedOf(input.files));
+    // The same file or folder can be chosen again after it was taken off the list.
     input.value = '';
   }
 
-  protected dropped(event: DragEvent): void {
+  protected async dropped(event: DragEvent): Promise<void> {
     event.preventDefault();
     this.dragging.set(false);
-    this.take(event.dataTransfer?.files ?? null);
+    const data = event.dataTransfer;
+    if (!data) return;
+    this.reading.set(true);
+    this.readFailed.set(false);
+    try {
+      this.take(await droppedFiles(data));
+    } catch {
+      // Part of a folder is worse than none: the person would think it was all there.
+      this.readFailed.set(true);
+    } finally {
+      this.reading.set(false);
+    }
   }
 
-  private take(list: FileList | null): void {
-    const added = [...(list ?? [])].map((file) => ({
-      key: ++this.lastFile,
-      file,
-      problem: fileProblem(file),
-    }));
+  private take(picked: readonly PickedFile[]): void {
+    const known = new Set(this.files().map(identityOf));
+    const added = picked
+      .filter((one) => !known.has(identityOf(one)))
+      .map(({ file, path }) => ({
+        ...sortFile(file),
+        key: ++this.lastFile,
+        file,
+        path,
+      }));
     this.files.update((all) => [...all, ...added]);
+  }
+
+  protected clearFiles(): void {
+    this.files.set([]);
+  }
+
+  protected useEnoughCap(): void {
+    this.capText.set(this.enoughCap());
+  }
+
+  protected removeLabel(name: string): string {
+    return $localize`:@@addContent.remove:Tirar ${name}:name: da lista`;
   }
 
   protected removeFile(key: number): void {
@@ -275,7 +371,11 @@ export class AddContentPage {
     if (!this.canSend() || capUsd === null || this.levelInvalid()) return;
     const sources: readonly ContentSource[] =
       this.way() === 'files'
-        ? this.goodFiles().map(({ file }) => ({ kind: 'file', file }))
+        ? this.going().map(({ file, path, role }) => ({
+            kind: role === 'audio' ? 'audio' : 'file',
+            file,
+            path,
+          }))
         : this.parsed().links.map(({ url }) => ({ kind: 'url', url }));
     this.sender.add(sources, {
       topic: this.topic(),

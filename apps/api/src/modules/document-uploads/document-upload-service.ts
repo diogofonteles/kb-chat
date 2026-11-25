@@ -65,8 +65,8 @@ export interface DocumentUploadServiceDeps {
   readonly now?: () => Date;
 }
 
-/** Uploads listed in "Documentos em processamento": the newest, at most this many. */
-const LIST_LIMIT = 100;
+/** Uploads listed in "Documentos em processamento": a folder or two, the newest first. */
+const LIST_LIMIT = 1_000;
 /** A file whose bytes stopped arriving this long ago is given up (as media, ADR 0033). */
 export const DOCUMENT_UPLOAD_ABANDON_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -130,7 +130,9 @@ export class DocumentUploadService {
       .find((one) => scope.includes(one.topic) && isSameLive(one, key));
     if (!pending) return null;
     const mine = pending.owner.principal === actor.principal || actor.isMaster;
-    const upload = mine ? this.viewNow(pending, actor, null) : null;
+    const upload = mine
+      ? this.viewNow(pending, actor, { received: null, kept: false })
+      : null;
     return { outcome: 'duplicate', document: upload?.document ?? null, upload };
   }
 
@@ -181,6 +183,32 @@ export class DocumentUploadService {
       throw new AppError('MEDIA_CONFLICT', 'The Mac is working on it');
     await this.deps.files.remove(id);
     await this.deps.records.remove(id);
+  }
+
+  /** A failed item goes again as it was sent, with its attempts renewed. */
+  async retry(actor: UploadActor, id: string): Promise<DocumentUpload> {
+    const record = this.deps.records.get(id);
+    if (!record || !this.mayManage(actor, record)) throw notFound();
+    if (record.state !== 'failed' || !(await this.isKept(record)))
+      throw notWaiting();
+    const again: DocumentUploadRecord = {
+      ...record,
+      state: 'received',
+      failure: null,
+      detail: null,
+      attempts: 0,
+      updatedAt: this.now().toISOString(),
+    };
+    await this.deps.records.put(again);
+    this.deps.wake?.();
+    return this.viewOf(again, actor);
+  }
+
+  /** A link is always there; a file, while its bytes are. */
+  private async isKept(record: DocumentUploadRecord): Promise<boolean> {
+    if (record.kind !== 'file') return true;
+    if (record.failure === 'upload-abandoned') return false;
+    return (await this.deps.files.find(record.id)) !== null;
   }
 
   private mayManage(actor: UploadActor, record: DocumentUploadRecord): boolean {
@@ -289,7 +317,7 @@ export class DocumentUploadService {
 
   /** "Documentos em processamento": one's own; masters see everyone's. */
   async list(actor: UploadActor): Promise<DocumentUpload[]> {
-    await this.giveUpAbandoned();
+    await this.sweep();
     const records = this.deps.records
       .all()
       .filter(
@@ -302,9 +330,12 @@ export class DocumentUploadService {
     return Promise.all(records.map((one) => this.viewOf(one, actor)));
   }
 
-  /** A file whose bytes stopped arriving a week ago is given up; its part is removed. */
-  private async giveUpAbandoned(): Promise<void> {
+  /** A week on: bytes that stopped arriving are given up, a failed file's bytes go. */
+  private async sweep(): Promise<void> {
     const limit = this.now().getTime() - DOCUMENT_UPLOAD_ABANDON_MS;
+    for (const record of this.deps.records.all())
+      if (record.state === 'failed' && Date.parse(record.updatedAt) < limit)
+        await this.deps.files.remove(record.id);
     const stale = this.deps.records
       .all()
       .filter(
@@ -331,13 +362,14 @@ export class DocumentUploadService {
           ? await this.deps.files.offset(record.id)
           : record.bytes
         : null;
-    return this.viewNow(record, actor, received);
+    const kept = record.state === 'failed' && (await this.isKept(record));
+    return this.viewNow(record, actor, { received, kept });
   }
 
   private viewNow(
     record: DocumentUploadRecord,
     actor: UploadActor,
-    received: number | null,
+    known: { readonly received: number | null; readonly kept: boolean },
   ): DocumentUpload {
     const media =
       record.mediaId && this.deps.mediaProgressOf
@@ -348,7 +380,7 @@ export class DocumentUploadService {
       this.deps.inCatalog(record.topic, record.document.id);
     const view = toDocumentUpload(record, {
       showsDetail: actor.isMaster,
-      received,
+      ...known,
       media,
       arrived,
       batch: record.batch

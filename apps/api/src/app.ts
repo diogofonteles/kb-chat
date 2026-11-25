@@ -1352,7 +1352,6 @@ async function startDocumentUploads(
       documents: wiring.levels.documents,
       scaleOf: mediaLevelsOf(wiring).scaleOf,
     },
-    createPerMinute: wiring.media.createPerMinute,
   });
   wiring.onDocIngest?.(queue);
   return queue;

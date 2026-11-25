@@ -52,7 +52,7 @@ const record = (
   ...fields,
 });
 
-const NOT_HELD = { batch: null, heldBy: null } as const;
+const NOT_HELD = { batch: null, heldBy: null, kept: false } as const;
 const BATCH = { id: '99999999-9999-4999-8999-999999999999', capUsd: 0.05 };
 const SECOND = '22222222-2222-4222-8222-222222222222';
 
@@ -128,7 +128,8 @@ describe('DocIngestQueue (KBC-149, ADR 0040)', () => {
       state: 'failed',
       failure: 'gave-up',
     });
-    expect(removed).toContain(record().id);
+    // Its file stays: the person may send it again as it is.
+    expect(removed).not.toContain(record().id);
   });
 
   it('gives nothing out with the media month spent', async () => {
