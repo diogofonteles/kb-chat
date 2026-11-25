@@ -327,13 +327,13 @@
           }
           <ul class="rows">
             @for (row of rows(); track row.url) {
-              <li class="row" [class.there]="row.already">
+              <li class="row" [class.there]="row.already || row.taken">
                 <input
                   class="ui-check"
                   type="checkbox"
                   [id]="row.id"
                   [checked]="selected().has(row.url)"
-                  [disabled]="disabled() || row.already !== null"
+                  [disabled]="disabled() || row.already !== null || row.taken"
                   [attr.aria-describedby]="row.id + '-about'"
                   (change)="toggle(row.url)"
                 />
@@ -341,7 +341,12 @@
                   <label class="title" [for]="row.id">{{ row.title }}</label>
                   <p class="about" [id]="row.id + '-about'">
                     <span class="visually-hidden">{{ row.kindLabel }}.</span>
-                    @if (row.already) {
+                    @if (row.taken) {
+                      <span class="there-words">
+                        <ui-icon name="checkcircle" [size]="14" />
+                        <span i18n="@@webSearch.taken">Incluído agora</span>
+                      </span>
+                    } @else if (row.already) {
                       <span class="there-words">
                         <ui-icon name="checkcircle" [size]="14" />
                         <span i18n="@@webSearch.already"
@@ -386,20 +391,6 @@
             }
           </ul>
         </fieldset>
-        @if (selectable().length > 0) {
-          <div class="foot">
-            <button
-              uiButton="primary"
-              type="button"
-              class="include"
-              [attr.aria-disabled]="cannotInclude() ? 'true' : null"
-              (click)="include()"
-            >
-              <ui-icon name="plus" [size]="18" />
-              {{ includeLabel() }}
-            </button>
-          </div>
-        }
       }
     }
   }

@@ -55,11 +55,15 @@ const aResponse = (
 interface Setup {
   readonly available?: { connected: boolean; low: boolean } | 'fails';
   readonly master?: boolean;
-  readonly inputs?: { topic?: string; disabled?: boolean };
+  readonly inputs?: {
+    topic?: string;
+    disabled?: boolean;
+    taken?: ReadonlySet<string>;
+  };
 }
 
 async function open(setup: Setup = {}) {
-  const picked = vi.fn();
+  const selection = vi.fn();
   const chat = { open: vi.fn() };
   const view = await render(WebSearchSection, {
     providers: [
@@ -74,7 +78,7 @@ async function open(setup: Setup = {}) {
       }),
     ],
     inputs: { topic: 'hermetismo', ...setup.inputs },
-    on: { picked },
+    on: { selection },
   });
   const http = TestBed.inject(HttpTestingController);
   // Not whenStable: it waits for the search on its way, whose state is what is looked at.
@@ -88,7 +92,7 @@ async function open(setup: Setup = {}) {
     available.flush('', { status: 500, statusText: 'x' });
   else available.flush(setup.available ?? { connected: true, low: false });
   await settle();
-  return { ...view, http, settle, picked, chat };
+  return { ...view, http, settle, selection, chat };
 }
 
 type Opened = Awaited<ReturnType<typeof open>>;
@@ -109,6 +113,12 @@ const status = () =>
     .getAllByRole('status')
     .map((one) => one.textContent?.trim())
     .join(' ');
+
+/** The addresses picked now, as the page is told. */
+const pickedNow = (opened: Opened): string[] =>
+  (opened.selection.mock.lastCall?.[0] ?? []).map(
+    (one: { url: string }) => one.url,
+  );
 
 /** A subject typed and "Pesquisar" pressed: the request that left. */
 async function searched(opened: Opened, text = 'hermetismo') {
@@ -322,15 +332,10 @@ describe('WebSearchSection: what it answers', () => {
     ).toContain('Já está no acervo');
   });
 
-  it('gives what stays picked to the parent, in order, once', async () => {
+  it('tells the page what is picked, in order', async () => {
     const opened = await open();
     await found(opened);
-    const include = chip('Incluir 2 selecionados');
-    include.click();
-    include.click();
-    await opened.settle();
-    expect(opened.picked).toHaveBeenCalledOnce();
-    expect(opened.picked).toHaveBeenCalledWith([
+    expect(opened.selection).toHaveBeenLastCalledWith([
       {
         url: 'https://www.exemplo.org/1',
         title: 'O Caibalion comentado',
@@ -342,10 +347,28 @@ describe('WebSearchSection: what it answers', () => {
         kind: 'video',
       },
     ]);
-    // The button stays, with nothing to include: the focus stays on it.
-    const after = chip('Incluir selecionados');
-    expect(after).toBe(include);
-    expect(after.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('what was included stays listed, cannot go twice, and what was left out stays out', async () => {
+    const opened = await open();
+    await found(opened);
+    fireEvent.click(box('Aula em vídeo'));
+    await opened.settle();
+    await opened.rerender({
+      inputs: {
+        topic: 'hermetismo',
+        taken: new Set(['https://www.exemplo.org/1']),
+      },
+      on: { selection: opened.selection },
+    });
+    await opened.settle();
+    const went = box('O Caibalion comentado');
+    expect([went.checked, went.disabled]).toEqual([false, true]);
+    expect(screen.getByText('Incluído agora')).toBeTruthy();
+    expect(box('Aula em vídeo').checked).toBe(false);
+    expect(pickedNow(opened)).toEqual([]);
+    // It is not "already there": the count is the search's own.
+    expect(status()).toContain('3 resultados, 1 já está no acervo.');
   });
 
   it('picks and unpicks one, or all', async () => {
@@ -356,26 +379,21 @@ describe('WebSearchSection: what it answers', () => {
     fireEvent.click(box('Aula em vídeo'));
     await opened.settle();
     expect([all.checked, all.indeterminate]).toEqual([false, true]);
-    expect(chip('Incluir 1 selecionado')).toBeTruthy();
+    expect(pickedNow(opened)).toHaveLength(1);
     fireEvent.click(all);
     await opened.settle();
-    expect(chip('Incluir 2 selecionados')).toBeTruthy();
+    expect(pickedNow(opened)).toHaveLength(2);
     fireEvent.click(all);
     await opened.settle();
     expect(box('O Caibalion comentado').checked).toBe(false);
-    fireEvent.click(chip('Incluir selecionados'));
-    expect(opened.picked).not.toHaveBeenCalled();
+    expect(pickedNow(opened)).toEqual([]);
   });
 
-  it('cannot include while the parent is busy', async () => {
+  it('cannot be changed while the parent is busy', async () => {
     const opened = await open();
     await found(opened);
     await opened.rerender({ inputs: { topic: 'hermetismo', disabled: true } });
     await opened.settle();
-    const include = chip('Incluir 2 selecionados');
-    expect(include.getAttribute('aria-disabled')).toBe('true');
-    fireEvent.click(include);
-    expect(opened.picked).not.toHaveBeenCalled();
     expect(box('Aula em vídeo').disabled).toBe(true);
   });
 
@@ -400,7 +418,7 @@ describe('WebSearchSection: what it answers', () => {
     expect(screen.getByText('Já está no acervo')).toBeTruthy();
     expect(screen.queryByText('Abrir no acervo')).toBeNull();
     expect(screen.queryByText('Selecionar todos')).toBeNull();
-    expect(screen.queryByText('Incluir selecionados')).toBeNull();
+    expect(pickedNow(opened)).toEqual([]);
   });
 
   it('says nothing was found', async () => {
@@ -417,7 +435,7 @@ describe('WebSearchSection: what it answers', () => {
     expect(screen.getByRole('alert').textContent).toContain(
       'Algumas consultas não responderam',
     );
-    expect(chip('Incluir 2 selecionados')).toBeTruthy();
+    expect(pickedNow(opened)).toHaveLength(2);
     fireEvent.click(chip('Tentar de novo'));
     await opened.settle();
     opened.http.expectOne(SEARCH).flush(aResponse());

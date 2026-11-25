@@ -9,11 +9,14 @@ import {
   inject,
   input,
   linkedSignal,
-  output,
   signal,
   viewChild,
 } from '@angular/core';
-import { rxResource } from '@angular/core/rxjs-interop';
+import {
+  outputFromObservable,
+  rxResource,
+  toObservable,
+} from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import {
   WEB_SEARCH_AUTHORS,
@@ -50,10 +53,9 @@ import {
   callsLabel,
   countLabel,
   creditsLabel,
-  includeLabel,
 } from './web-search-labels.js';
 
-/** What the person picked: the parent sends it as links (KBC-149). */
+/** What is picked now: the parent sends it as links (KBC-149), with the estimate beside it. */
 export interface PickedWebResult {
   readonly url: string;
   readonly title: string;
@@ -74,6 +76,8 @@ type View =
 
 interface Row extends WebSearchResult {
   readonly id: string;
+  /** Sent from here a moment ago. */
+  readonly taken: boolean;
   readonly kindLabel: string;
 }
 
@@ -85,8 +89,8 @@ const KIND_ICONS: Record<WebSearchKind, IconName> = {
 
 /**
  * "Pesquisar na web" (KBC-185): texts, audios and videos found on the web, to pick from. They
- * come picked, but what the collection already has; nothing is added here: what stays picked
- * goes out by `picked`.
+ * come picked, but what the collection already has; nothing is added here: `selection` says
+ * what is picked now, and the page includes it as it includes files and links.
  */
 @Component({
   selector: 'app-web-search-section',
@@ -115,7 +119,8 @@ export class WebSearchSection {
   readonly topic = input.required<string>();
   /** The parent is busy sending, or may not send now. */
   readonly disabled = input(false);
-  readonly picked = output<PickedWebResult[]>();
+  /** The addresses already included from here: they stay listed, and cannot go twice. */
+  readonly taken = input<ReadonlySet<string>>(new Set());
 
   private readonly subjectInput =
     viewChild<ElementRef<HTMLInputElement>>('subjectInput');
@@ -205,19 +210,34 @@ export class WebSearchSection {
       ...result,
       id: `web-result-${at}`,
       kindLabel: KIND_LABELS[result.kind](),
+      taken: this.taken().has(result.url),
     })),
   );
   protected readonly selectable = computed(() =>
-    this.rows().filter((row) => row.already === null),
+    this.rows().filter((row) => row.already === null && !row.taken),
   );
   /** Every candidate comes picked, but what the collection already has. */
   protected readonly selected = linkedSignal<
-    readonly Row[],
+    { readonly of: WebSearchResponse | null; readonly rows: readonly Row[] },
     ReadonlySet<string>
   >({
-    source: this.selectable,
-    computation: (rows) => new Set(rows.map((row) => row.url)),
+    source: () => ({ of: this.response(), rows: this.selectable() }),
+    computation: ({ of, rows }, before) => {
+      const urls = rows.map((row) => row.url);
+      // The same answer with some of it included: what was left out stays out.
+      const kept =
+        before?.source.of === of
+          ? urls.filter((url) => before.value.has(url))
+          : urls;
+      return new Set(kept);
+    },
   });
+  private readonly chosen = computed<readonly PickedWebResult[]>(() =>
+    this.rows()
+      .filter((row) => this.selected().has(row.url))
+      .map(({ url, title, kind }) => ({ url, title, kind })),
+  );
+  readonly selection = outputFromObservable(toObservable(this.chosen));
   protected readonly allSelected = computed(
     () =>
       this.selected().size > 0 &&
@@ -225,12 +245,6 @@ export class WebSearchSection {
   );
   protected readonly someSelected = computed(
     () => this.selected().size > 0 && !this.allSelected(),
-  );
-  protected readonly includeLabel = computed(() =>
-    includeLabel(this.selected().size),
-  );
-  protected readonly cannotInclude = computed(
-    () => this.disabled() || this.selected().size === 0,
   );
   /** Said to a screen reader too, when it changes (aria-live). */
   protected readonly status = computed(() => {
@@ -240,7 +254,10 @@ export class WebSearchSection {
     if (view.kind !== 'found') return '';
     const found =
       this.rows().length > 0
-        ? countLabel(this.rows().length, this.selectable().length)
+        ? countLabel(
+            this.rows().length,
+            this.rows().filter((row) => row.already === null).length,
+          )
         : $localize`:@@webSearch.none:Nada encontrado para “${this.askedSubject()}:subject:”`;
     return [`${found}.`, this.credits()].filter(Boolean).join(' ');
   });
@@ -377,15 +394,6 @@ export class WebSearchSection {
       ? []
       : this.selectable().map((row) => row.url);
     this.selected.set(new Set(urls));
-  }
-
-  protected include(): void {
-    if (this.cannotInclude()) return;
-    const chosen = this.rows().filter((row) => this.selected().has(row.url));
-    this.selected.set(new Set<string>());
-    this.picked.emit(
-      chosen.map(({ url, title, kind }) => ({ url, title, kind })),
-    );
   }
 
   /** The document the collection already has, in the conversation's reading panel. */

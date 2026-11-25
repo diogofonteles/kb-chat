@@ -5,6 +5,11 @@
   min-width: 0;
 }
 
+/* Out of sight in another tab of the page, its results kept (a search is paid). */
+:host([hidden]) {
+  display: none;
+}
+
 fieldset {
   min-width: 0;
   margin: 0;
@@ -140,6 +145,19 @@ fieldset {
   cursor: pointer;
 }
 
+/* Some picked, not all: a dash (never the look of none). */
+.all .ui-check:indeterminate {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.all .ui-check:indeterminate::after {
+  content: '';
+  width: 0.5rem;
+  height: 2px;
+  background: var(--color-on-accent);
+}
+
 .rows {
   display: grid;
   gap: var(--space-1);
@@ -208,6 +226,7 @@ fieldset {
 
 .there-words {
   display: inline-flex;
+  vertical-align: bottom;
   align-items: center;
   gap: var(--space-1);
   margin-right: var(--space-2);
@@ -267,18 +286,6 @@ fieldset {
   text-decoration: underline;
 }
 
-/* At the foot of whatever scrolls while the rows run under it. */
-.foot {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  display: flex;
-  justify-content: flex-end;
-  padding: var(--space-3) 0;
-  border-top: 1px solid var(--overlay-line);
-  background: var(--color-bg);
-}
-
 .skeleton {
   display: grid;
   gap: var(--space-2);
@@ -327,7 +334,6 @@ fieldset {
     align-items: center;
   }
 
-  .include,
   .go {
     width: 100%;
   }

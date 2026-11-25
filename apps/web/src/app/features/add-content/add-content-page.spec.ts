@@ -283,6 +283,69 @@ describe('AddContentPage (KBC-184)', () => {
     expect(sending.defaultPrevented).toBe(true);
   });
 
+  it('searches the web, estimates what is picked and includes it with the rest', async () => {
+    const { fixture, http } = await renderPage();
+    const settle = async () => {
+      await new Promise((resolve) => setTimeout(resolve));
+      TestBed.tick();
+      await new Promise((resolve) => setTimeout(resolve));
+    };
+    fireEvent.click(screen.getByRole('button', { name: 'Pesquisar na web' }));
+    await settle();
+    http
+      .expectOne('/api/v1/web-search/available')
+      .flush({ connected: true, low: false });
+    await settle();
+    fireEvent.input(screen.getByLabelText('Assunto'), {
+      target: { value: 'hermetismo' },
+    });
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Pesquisar' }));
+    await settle();
+    const result = (kind: string, url: string) => ({
+      ...{ kind, url, title: url, snippet: '', site: 'x.org' },
+      ...{ author: null, already: null },
+    });
+    http
+      .expectOne((one) => one.url.endsWith('/hermetismo/web-search'))
+      .flush({
+        results: [
+          result('text', 'https://x.org/1'),
+          result('video', 'https://youtu.be/abc'),
+        ],
+        ...{ creditsUsed: 2, creditsRemaining: 900 },
+        ...{ low: false, partial: false },
+      });
+    await settle();
+    expect(screen.getByText('1 página da web')).toBeTruthy();
+    expect(screen.getByText('1 áudio ou vídeo')).toBeTruthy();
+
+    // Another tab and back: a paid search is not lost.
+    fireEvent.click(screen.getByRole('button', { name: 'Links' }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Pesquisar na web' }));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Incluir 2 itens' }));
+    await settle();
+    const bodies = [];
+    for (let n = 0; n < 2; n += 1) {
+      const asked = http.expectOne(
+        (one) => one.method === 'POST' && one.url.endsWith('/documents'),
+      );
+      bodies.push(asked.request.body);
+      asked.flush({ outcome: 'duplicate', document: null, upload: null });
+      await settle();
+    }
+    expect(bodies).toMatchObject([
+      { url: 'https://x.org/1', as: 'page' },
+      { url: 'https://youtu.be/abc', as: 'recording' },
+    ]);
+    expect(bodies[0].batch).toEqual(bodies[1].batch);
+    expect(screen.getAllByText('Incluído agora')).toHaveLength(2);
+    expect(include().disabled).toBe(true);
+    fixture.destroy();
+  });
+
   it('leaving the page inside the app stops nothing: the sends go on and are found on coming back', async () => {
     const { fixture, http } = await renderPage();
     await typeLinks('https://example.org/1\nhttps://example.org/2', fixture);

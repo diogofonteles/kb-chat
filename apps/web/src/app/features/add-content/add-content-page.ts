@@ -33,6 +33,10 @@ import { DocumentUploadsStore } from '@features/document-upload/document-uploads
 import { levelChoicesOf } from '@features/media/level-choices.js';
 import { LevelField } from '@features/media/level-field.js';
 import { UploadPanel } from '@features/media/upload-panel.js';
+import {
+  WebSearchSection,
+  type PickedWebResult,
+} from '@features/web-search/web-search-section.js';
 import { UiBanner, UiButton, UiChip, UiIcon, UiIconButton } from '@ui/index.js';
 import type { IconName } from '@ui/icons.js';
 import { map } from 'rxjs';
@@ -57,7 +61,7 @@ import { MAX_LINKS, parseLinks, type ContentLink } from './content-links.js';
 import { ContentSender, type ContentSource } from './content-sender.js';
 import { ContentSends } from './content-sends.js';
 
-type Way = 'files' | 'links' | 'media';
+type Way = 'files' | 'links' | 'search' | 'media';
 
 const WAYS: readonly {
   readonly way: Way;
@@ -73,6 +77,11 @@ const WAYS: readonly {
     way: 'links',
     icon: 'link',
     label: $localize`:@@addContent.wayLinks:Links`,
+  },
+  {
+    way: 'search',
+    icon: 'search',
+    label: $localize`:@@addContent.waySearch:Pesquisar na web`,
   },
   {
     way: 'media',
@@ -110,6 +119,11 @@ const countsOfFiles = (files: readonly ChosenFile[]): ContentCounts => {
     document: documents.length - image,
     recording: files.length - documents.length,
   };
+};
+
+const countsOfPicks = (picks: readonly PickedWebResult[]): ContentCounts => {
+  const page = picks.filter(({ kind }) => kind === 'text').length;
+  return { ...NO_CONTENT, page, recording: picks.length - page };
 };
 
 const countsOfLinks = (links: readonly ContentLink[]): ContentCounts => {
@@ -150,6 +164,7 @@ const rootIn = (topics: readonly Topic[], slug: string): string =>
     UiIcon,
     UiIconButton,
     UploadPanel,
+    WebSearchSection,
   ],
   providers: [ContentCostsStore, DocumentUploadsStore],
   templateUrl: './add-content-page.html',
@@ -220,6 +235,14 @@ export class AddContentPage {
   protected readonly tooManyLinks = computed(
     () => this.parsed().links.length > MAX_LINKS,
   );
+  /** What is picked in the search now, and what of it went already to this collection. */
+  protected readonly picks = signal<readonly PickedWebResult[]>([]);
+  protected readonly taken = linkedSignal<string, ReadonlySet<string>>({
+    source: this.topic,
+    computation: () => new Set<string>(),
+  });
+  /** Kept once opened: a search is paid, and another tab must not lose its results. */
+  protected readonly searchOpened = signal(false);
   protected readonly uploadingMedia = signal(false);
   private readonly submitted = signal(false);
   private lastFile = 0;
@@ -271,17 +294,20 @@ export class AddContentPage {
       .map(({ text }) => text)
       .join(' · ');
   });
-  protected readonly count = computed(() =>
-    this.way() === 'files'
-      ? this.going().length
-      : this.way() === 'links'
-        ? this.parsed().links.length
-        : 0,
-  );
+  protected readonly count = computed(() => {
+    const by: Record<Way, () => number> = {
+      files: () => this.going().length,
+      links: () => this.parsed().links.length,
+      search: () => this.picks().length,
+      media: () => 0,
+    };
+    return by[this.way()]();
+  });
   /** What is about to be sent, by what it costs. */
   protected readonly counts = computed<ContentCounts>(() => {
     if (this.way() === 'files') return countsOfFiles(this.going());
     if (this.way() === 'links') return countsOfLinks(this.parsed().links);
+    if (this.way() === 'search') return countsOfPicks(this.picks());
     return NO_CONTENT;
   });
   protected readonly levelInvalid = computed(
@@ -295,7 +321,7 @@ export class AddContentPage {
       this.count() > 0 &&
       this.topic() !== '' &&
       this.capUsd() !== null &&
-      !this.tooManyLinks() &&
+      !(this.way() === 'links' && this.tooManyLinks()) &&
       !this.levels.failedWhereLevelsMayBe(this.root()),
   );
   protected readonly includeLabel = computed(() => {
@@ -334,6 +360,7 @@ export class AddContentPage {
 
   protected choose(way: Way): void {
     this.way.set(way);
+    if (way === 'search') this.searchOpened.set(true);
   }
 
   protected chooseTopic(slug: string): void {
@@ -403,22 +430,42 @@ export class AddContentPage {
     this.submitted.set(true);
     const capUsd = this.capUsd();
     if (!this.canSend() || capUsd === null || this.levelInvalid()) return;
-    const sources: readonly ContentSource[] =
-      this.way() === 'files'
-        ? this.going().map(({ file, path, role }) => ({
-            kind: role === 'document' ? 'file' : 'audio',
-            file,
-            path,
-          }))
-        : this.parsed().links.map(({ url }) => ({ kind: 'url', url }));
-    this.sender.add(sources, {
+    this.sender.add(this.sources(), {
       topic: this.topic(),
       level: this.level(),
       batch: { id: crypto.randomUUID(), capUsd },
     });
-    if (this.way() === 'files') this.files.set([]);
-    else this.text.set(this.parsed().refused.join('\n'));
+    this.clearSent();
     this.submitted.set(false);
+  }
+
+  private sources(): readonly ContentSource[] {
+    const by: Record<Way, () => readonly ContentSource[]> = {
+      files: () =>
+        this.going().map(({ file, path, role }) => ({
+          kind: role === 'document' ? 'file' : 'audio',
+          file,
+          path,
+        })),
+      links: () => this.parsed().links.map(({ url }) => ({ kind: 'url', url })),
+      search: () =>
+        this.picks().map(({ url, kind }) => ({
+          kind: 'url',
+          url,
+          as: kind === 'text' ? 'page' : 'recording',
+        })),
+      media: () => [],
+    };
+    return by[this.way()]();
+  }
+
+  private clearSent(): void {
+    if (this.way() === 'files') this.files.set([]);
+    if (this.way() === 'links') this.text.set(this.parsed().refused.join('\n'));
+    if (this.way() === 'search') {
+      const went = this.picks().map(({ url }) => url);
+      this.taken.update((before) => new Set([...before, ...went]));
+    }
   }
 
   protected openDocument(doc: OpenedDocument): void {

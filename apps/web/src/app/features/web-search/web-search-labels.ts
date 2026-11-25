@@ -22,15 +22,6 @@ export const callsLabel = (calls: number): string =>
     ? $localize`:@@webSearch.callsOne:Faz 1 consulta no Firecrawl.`
     : $localize`:@@webSearch.calls:Faz até ${calls}:count: consultas no Firecrawl.`;
 
-/** "Incluir 3 selecionados". */
-export function includeLabel(selected: number): string {
-  if (selected === 0)
-    return $localize`:@@webSearch.includeNone:Incluir selecionados`;
-  return selected === 1
-    ? $localize`:@@webSearch.includeOne:Incluir 1 selecionado`
-    : $localize`:@@webSearch.include:Incluir ${selected}:count: selecionados`;
-}
-
 /** "12 resultados, 3 já estão no acervo". */
 export function countLabel(total: number, selectable: number): string {
   const found =

@@ -304,6 +304,15 @@
       }
     }
 
+    @if (searchOpened()) {
+      <app-web-search-section
+        [topic]="topic()"
+        [taken]="taken()"
+        [hidden]="way() !== 'search'"
+        (selection)="picks.set($event)"
+      />
+    }
+
     @if (way() !== 'media') {
       @if (count() > 0) {
         <app-content-estimate [counts]="counts()" />
