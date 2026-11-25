@@ -11,6 +11,9 @@ const recordSchema = z.object({
   id: z.uuid(),
   topic: z.string(),
   document: z.object({ id: z.string(), title: z.string() }),
+  source: z
+    .object({ sha256: z.string().nullable(), url: z.string().nullable() })
+    .default({ sha256: null, url: null }),
   level: z.string().nullable(),
   by: z.object({ email: z.string(), name: z.string() }),
   removedAt: z.string(),

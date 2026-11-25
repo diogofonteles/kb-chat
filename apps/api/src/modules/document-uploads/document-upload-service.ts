@@ -70,6 +70,11 @@ export interface DocumentUploadServiceDeps {
   readonly inCatalog: (topic: string, id: string) => boolean;
   /** It was taken out of the collection (KBC-187). */
   readonly isRemoved?: (topic: string, id: string) => boolean;
+  /** A master took out what this original or link became: only a master brings it back. */
+  readonly wasRemoved?: (
+    scope: readonly string[],
+    key: { readonly sha256: string | null; readonly url: string | null },
+  ) => boolean;
   /** Where a recording link's media item is now. */
   readonly mediaProgressOf?: (mediaId: string) => MediaProgress | null;
   /** The Mac that publishes to the collections: paired, seen in the last minutes, or not. */
@@ -118,16 +123,14 @@ export class DocumentUploadService {
     topic: string,
     request: CreateDocumentUploadRequest,
   ): Promise<CreateDocumentUploadResponse> {
-    if (!actor.canUpload)
-      throw new AppError('FORBIDDEN', 'You may not send documents');
-    if (!actor.canSee(topic) || !this.deps.hasTopic(topic))
-      throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
+    this.assertMaySendTo(actor, topic);
     const level = chosenLevel(actor, {
       topic,
       scale: this.deps.scaleOf(topic),
       asked: request.level,
     });
     const key = keyOf(request);
+    this.assertNotRemoved(actor, topic, key);
     const repeated = this.repeated(actor, topic, key);
     if (repeated) return repeated;
     const batch = this.batchFor(actor, request);
@@ -241,6 +244,27 @@ export class DocumentUploadService {
         })
       : null;
     return { outcome: 'duplicate', document: upload?.document ?? null, upload };
+  }
+
+  private assertMaySendTo(actor: UploadActor, topic: string): void {
+    if (!actor.canUpload)
+      throw new AppError('FORBIDDEN', 'You may not send documents');
+    if (!actor.canSee(topic) || !this.deps.hasTopic(topic))
+      throw new AppError('TOPIC_NOT_FOUND', `Unknown topic ${topic}`);
+  }
+
+  /** What a master took out of the collection only a master sends back (KBC-187 BR-1). */
+  private assertNotRemoved(
+    actor: UploadActor,
+    topic: string,
+    key: UploadKey,
+  ): void {
+    const scope = this.deps.scopeOf(topic);
+    if (!actor.isMaster && this.deps.wasRemoved?.(scope, key))
+      throw new AppError(
+        'DOCUMENT_REMOVED',
+        'A master took it out of the collection',
+      );
   }
 
   /** Its file is here: arriving, waiting for the Mac, or kept after it failed. */
@@ -652,9 +676,10 @@ export class DocumentUploadService {
     return ready.length;
   }
 
-  /** The collection it was sent to; undefined for what was not sent from the app. */
-  topicOf(id: string): string | undefined {
-    return this.deps.records.get(id)?.topic;
+  /** Where it was sent and by whom; undefined for what was not sent from the app. */
+  sentOf(id: string): { topic: string; by: string } | undefined {
+    const record = this.deps.records.get(id);
+    return record && { topic: record.topic, by: record.owner.principal };
   }
 
   /** Everything a view is told of besides its own item, read once for a whole list. */

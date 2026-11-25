@@ -171,6 +171,7 @@ function uploadService(
     findExisting: (scope, key) => findExisting(catalog, scope, key),
     inCatalog: (topic, id) => catalog.get(topic)?.entries.has(id) === true,
     isRemoved: (topic, id) => wiring.removals.isRemoved(topic, id),
+    wasRemoved: (scope, key) => wiring.removals.madeOf(scope, key),
     mediaProgressOf: (mediaId) => mediaProgressOf(wiring, mediaId),
     mac: () => macNow(wiring.mac),
     monthLeftUsd: () => wiring.documents.kb.budgetUsd(),

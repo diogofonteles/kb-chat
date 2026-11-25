@@ -20,8 +20,15 @@ const DOCUMENTS: Record<string, Record<string, string>> = {
   },
 };
 
+/** What holds the readings of the vault: each one past the removals' check waits for `wait`. */
+interface Gate {
+  wait?: Promise<void>;
+  /** Told when a held reading began. */
+  reached?: () => void;
+}
+
 /** The collection and its sub-collection; `gate` holds a reading until it is let go. */
-function vaultOf(gate: { wait?: Promise<void> } = {}): VaultReaderPort {
+function vaultOf(gate: Gate = {}): VaultReaderPort {
   return {
     listTopics: () =>
       Promise.resolve([
@@ -31,7 +38,9 @@ function vaultOf(gate: { wait?: Promise<void> } = {}): VaultReaderPort {
     listDocuments: (topic) =>
       Promise.resolve(Object.keys(DOCUMENTS[topic] ?? {})),
     readDocument: async (topic, id) => {
-      await gate.wait;
+      const held = gate.wait;
+      if (held) gate.reached?.();
+      await held;
       return DOCUMENTS[topic]?.[id] ?? null;
     },
   };
@@ -45,7 +54,7 @@ const master = {
   seesDocument: () => true,
 };
 
-async function world(gate: { wait?: Promise<void> } = {}) {
+async function world(gate: Gate = {}) {
   const records = await RemovalRecords.open(new MemoryDocumentRemovalStore());
   const catalog = new CatalogRegistry(
     new RemovedVault(vaultOf(gate), records),
@@ -107,33 +116,45 @@ describe('RemovalService (KBC-187)', () => {
   });
 });
 
-describe('a reading of the collection under way (I-1)', () => {
+/** Holds the readings from now on; `reached` once one is past the removals' check. */
+function hold(gate: Gate): { go: () => void; reached: Promise<void> } {
+  let go: () => void = () => undefined;
+  gate.wait = new Promise((resolve) => {
+    go = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    gate.reached = resolve;
+  });
+  return { go, reached };
+}
+
+describe('a reading of the collection under way (I-1, R2-I1)', () => {
   it('never brings back what was removed meanwhile', async () => {
-    const gate: { wait?: Promise<void> } = {};
+    const gate: Gate = {};
     const { service, catalog, has } = await world(gate);
-    let go: () => void = () => undefined;
-    gate.wait = new Promise((resolve) => {
-      go = resolve;
-    });
+    const held = hold(gate);
     const loading = catalog.load();
+    // The reading is past the vault's own check: only the catalog may leave it out now.
+    await held.reached;
     await service.remove(master, 'hermetismo', 'raw/livro.md');
     expect(has('hermetismo', 'raw/livro.md')).toBe(false);
-    go();
+    held.go();
     await loading;
     expect(has('hermetismo', 'raw/livro.md')).toBe(false);
   });
 
-  it('never hides what came back meanwhile', async () => {
-    const gate: { wait?: Promise<void> } = {};
+  it('never hides what came back while an older reading went on', async () => {
+    const gate: Gate = {};
     const { service, catalog, has } = await world(gate);
     const { id } = await service.remove(master, 'hermetismo', 'raw/livro.md');
-    let go: () => void = () => undefined;
-    gate.wait = new Promise((resolve) => {
-      go = resolve;
-    });
+    const held = hold(gate);
+    // Read while it was out: this reading has nothing of it.
     const loading = catalog.load();
+    await held.reached;
+    gate.wait = undefined;
+    // Back now, with no Mac asked: its own reading would end first, were they not in turn.
     const back = service.restore(master, id);
-    go();
+    held.go();
     await Promise.all([loading, back]);
     expect(has('hermetismo', 'raw/livro.md')).toBe(true);
   });

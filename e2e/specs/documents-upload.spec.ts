@@ -451,12 +451,17 @@ async function includeLinks(
 /** The Mac as the API tells it, whatever the other tests paired. */
 async function withMac(page: Page, mac: object) {
   await page.route('**/api/v1/document-uploads', async (route) => {
-    const answer = await route.fetch();
-    const body = (await answer.json()) as { work: object };
-    await route.fulfill({
-      response: answer,
-      json: { ...body, work: { ...body.work, busy: false, mac } },
-    });
+    // A reading still on its way when the test ends finds no page: it is let go.
+    try {
+      const answer = await route.fetch();
+      const body = (await answer.json()) as { work: object };
+      await route.fulfill({
+        response: answer,
+        json: { ...body, work: { ...body.work, busy: false, mac } },
+      });
+    } catch {
+      await route.abort().catch(() => undefined);
+    }
   });
 }
 

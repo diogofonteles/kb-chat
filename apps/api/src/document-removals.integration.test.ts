@@ -64,6 +64,11 @@ async function withDocument() {
 
 type World = Awaited<ReturnType<typeof withDocument>>;
 
+const ownerOf = (media: Media) => ({
+  call: media.owner,
+  headers: media.ownerHeaders,
+});
+
 const removed = async (made: World): Promise<DocumentRemoval> => {
   const response = await made.master('POST', `${url()}/removal`);
   expect(response.statusCode, response.body).toBe(200);
@@ -245,7 +250,8 @@ describe('Removing a document from its collection in the app (KBC-187)', () => {
     await removed(made);
     const job = await leaseDoc(media, mac.token);
     await moved(made, job);
-    const upload = await sentFile(media, ana);
+    // Who sends it again is a master: no one else brings it back.
+    const upload = await sentFile(media, ownerOf(media));
     const again = await leaseDoc(media, mac.token);
     expect(again.id).toBe(upload.id);
     // As the Mac does it: kb tells the same text in its quarantine, and it is restored.
@@ -263,16 +269,29 @@ describe('Removing a document from its collection in the app (KBC-187)', () => {
     expect(await reach(media, ana.call)).toMatchObject({ read: 200 });
   });
 
+  it('sent again by who is no master, it stays out; a master brings it back so (BR-1)', async () => {
+    const made = await withDocument();
+    const { media, mac, ana, master } = made;
+    await removed(made);
+    await moved(made, await leaseDoc(media, mac.token));
+    const refused = await announce(ana.call);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json()).toMatchObject({
+      error: { code: 'DOCUMENT_REMOVED' },
+    });
+    const byMaster = await announce(master);
+    expect(byMaster.json()).toMatchObject({ outcome: 'created' });
+  });
+
   it('a Mac from before, that calls it a repeat, leaves nothing that cannot be sent (BR-6)', async () => {
     const made = await withDocument();
     const { media, mac, ana } = made;
     await removed(made);
     await moved(made, await leaseDoc(media, mac.token));
-    await sentFile(media, ana);
-    const job = await leaseDoc(media, mac.token);
+    await sentFile(media, ownerOf(media));
     await docResult(media, {
       token: mac.token,
-      job,
+      job: await leaseDoc(media, mac.token),
       outcome: {
         state: 'duplicate',
         document: {
@@ -282,7 +301,7 @@ describe('Removing a document from its collection in the app (KBC-187)', () => {
       },
     });
     expect(await uploadsOf(ana.call)).toEqual([]);
-    expect((await announce(ana.call)).json()).toMatchObject({
+    expect((await announce(media.owner)).json()).toMatchObject({
       outcome: 'created',
     });
   });
@@ -301,7 +320,7 @@ describe('Removing a document from its collection in the app (KBC-187)', () => {
       job: await leaseDoc(media, mac.token),
       outcome,
     });
-    await sentFile(media, ana);
+    await sentFile(media, ownerOf(media));
     await docResult(media, {
       token: mac.token,
       job: await leaseDoc(media, mac.token),

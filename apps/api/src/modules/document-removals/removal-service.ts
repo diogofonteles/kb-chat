@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { DocumentRemoval, DocumentRemovalState } from '@kb-chat/contracts';
+import {
+  sameLinkKey,
+  type DocumentRemoval,
+  type DocumentRemovalState,
+} from '@kb-chat/contracts';
 import { AppError } from '../../app-error.js';
 import type { RemovalRecord } from '../../ports/document-removals.js';
 import { isTrackEntry, type CatalogRegistry } from '../catalog/index.js';
@@ -84,7 +88,7 @@ export class RemovalService {
     actor: RemovalActor,
     topic: string,
     documentId: string,
-  ): Pick<RemovalRecord, 'topic' | 'document'> {
+  ): Pick<RemovalRecord, 'topic' | 'document' | 'source'> {
     if (!actor.canSee(topic)) throw gone();
     const entry = this.deps.catalog.scopeView(topic)?.entries.get(documentId);
     const home = entry?.home ?? { topic, id: documentId };
@@ -98,6 +102,10 @@ export class RemovalService {
     return {
       topic: home.topic,
       document: { id: home.id, title: entry.title },
+      source: {
+        sha256: entry.original?.sha256 ?? null,
+        url: entry.sourcePath ? sameLinkKey(entry.sourcePath) : null,
+      },
     };
   }
 

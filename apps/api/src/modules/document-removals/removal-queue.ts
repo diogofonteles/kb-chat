@@ -173,10 +173,12 @@ export class RemovalQueue {
 
   /** The Mac cannot do it as it is: said, until a person asks again. */
   private async refuse(record: RemovalRecord, detail: string): Promise<void> {
-    await this.deps.records.update(record.id, (current) => ({
-      ...current,
-      ...gaveUp(detail),
-    }));
+    await this.deps.records.update(record.id, (current) =>
+      // What failed is not what is asked now: that is asked of the Mac as it comes.
+      current.lease?.wish === current.wish
+        ? { ...current, ...gaveUp(detail) }
+        : { ...current, lease: null, attempts: 0 },
+    );
   }
 
   /** A crash counts; the Mac's own setup does not. */
@@ -186,7 +188,7 @@ export class RemovalQueue {
   ): Promise<void> {
     const record = this.held(owner);
     const attempts = record.attempts + (failure.configuration ? 0 : 1);
-    if (attempts >= MAX_ATTEMPTS) {
+    if (attempts >= MAX_ATTEMPTS || record.lease?.wish !== record.wish) {
       await this.refuse(record, failure.detail);
       return;
     }

@@ -11,6 +11,7 @@ const record = (fields: Partial<RemovalRecord> = {}): RemovalRecord => ({
   id: ID,
   topic: 'hermetismo',
   document: { id: 'raw/livro.md', title: 'O Livro' },
+  source: { sha256: null, url: null },
   level: null,
   by: { email: 'dono@example.com', name: 'Dono' },
   removedAt: '2026-11-25T12:00:00.000Z',
@@ -213,6 +214,25 @@ describe('two things asked at once (I-3)', () => {
     await expect(
       queue.complete(owner(), { outcome: ready }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+});
+
+describe('what failed is not what is asked now (S-r2-2)', () => {
+  it('a failure of the way out, asked back meanwhile, only lets the Mac go', async () => {
+    const { queue, records, owner } = await world();
+    queue.lease('mac');
+    await records.update(ID, (one) => ({ ...one, wish: 'present' }));
+    await queue.complete(owner(), {
+      outcome: {
+        state: 'failed',
+        failure: 'conversion-failed',
+        detail: 'kb: locked',
+      },
+    });
+    expect(records.get(ID)).toMatchObject({ failed: false, attempts: 0 });
+    expect(queue.lease('mac')?.source.kind).toBe('restore');
+    await queue.fail(owner(), { detail: 'crash' });
+    expect(records.get(ID)).toMatchObject({ failed: false });
   });
 });
 

@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlsplit
 
-from .kb_publish import REMOVED, KbPublisher, KbStepFailed
+from .kb_publish import KbPublisher, KbStepFailed, taken_out_by_person
 from .known_links import is_short, known_address
 from .recording_file import NotARecording, TooLarge, fetch_file, led_to
 
@@ -496,8 +496,8 @@ class DocIngester:
         duplicates): what a person took out comes back, what kb refused waits for a person."""
         topic = job["topic"]
         vault = self.publisher.vault
-        refused = refused_in(vault, topic, {"document": apart})
-        if refused is None or refused["reason"] != REMOVED:
+        if not taken_out_by_person(vault / topic, apart):
+            refused = refused_in(vault, topic, {"document": apart})
             detail = "kb had refused the same text before"
             raise DocIngestFailed("not-accepted", detail, usd, refused)
         document = apart.replace(QUARANTINE, "raw/", 1)
@@ -533,6 +533,9 @@ class DocIngester:
         inside = folder / document
         if inside.is_file() == out:
             self._moved(topic, document, out=out)
+        elif not out:
+            # Never taken out, and wanted back: no decision of a person waits for it any more.
+            self.publisher.forget(topic, document, "remove")
         # Also where it already is: the attempt that moved it may have ended before the index.
         self.publisher.reindex(topic)
 

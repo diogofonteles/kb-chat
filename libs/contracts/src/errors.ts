@@ -43,6 +43,8 @@ export const API_ERROR_CODES = [
   'MEDIA_DUPLICATE',
   /** The upload would pass the person's quota; `details.quotaBytes` says it (KBC-035 BR-1). */
   'MEDIA_QUOTA_EXCEEDED',
+  /** A master took what this became out of the collection: only a master brings it back (KBC-187). */
+  'DOCUMENT_REMOVED',
   /** The same document is in the collection, or on its way to it (KBC-149 BR-3). */
   'DOCUMENT_DUPLICATE',
   /** The disk keeps a reserve and this file would pass it (KBC-184). */

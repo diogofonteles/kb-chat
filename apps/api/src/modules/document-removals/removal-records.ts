@@ -34,6 +34,20 @@ export class RemovalRecords {
     );
   }
 
+  /** Taken out, and made of this original or this link, in one of these collections. */
+  madeOf(
+    scope: readonly string[],
+    key: { readonly sha256: string | null; readonly url: string | null },
+  ): boolean {
+    return this.all().some(
+      ({ topic, wish, source }) =>
+        wish === 'removed' &&
+        scope.includes(topic) &&
+        ((key.sha256 !== null && source.sha256 === key.sha256) ||
+          (key.url !== null && source.url === key.url)),
+    );
+  }
+
   /** The app hides it: not listed, not read, not found. */
   isRemoved(topic: string, documentId: string): boolean {
     return this.of(topic, documentId)?.wish === 'removed';

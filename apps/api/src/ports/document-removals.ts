@@ -16,6 +16,11 @@ export interface RemovalRecord {
   readonly id: string;
   readonly topic: string;
   readonly document: UploadedDocumentRef;
+  /** What it was made of: the same original or link sent by who is no master stays out. */
+  readonly source: {
+    readonly sha256: string | null;
+    readonly url: string | null;
+  };
   /** The level it had, for when it is back (ADR 0036 §5). */
   readonly level: string | null;
   readonly by: { readonly email: string; readonly name: string };

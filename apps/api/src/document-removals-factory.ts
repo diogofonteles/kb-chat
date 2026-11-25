@@ -40,7 +40,7 @@ export async function registerDocumentRemovals(
   app: FastifyInstance,
   wiring: DocumentRemovalsWiring,
 ): Promise<DocIngestWork> {
-  const { records, catalog, uploads } = wiring;
+  const { catalog } = wiring;
   const service = removalService(app, wiring);
   await app.register(
     documentRemovalRoutes({
@@ -55,13 +55,8 @@ export async function registerDocumentRemovals(
   const jobs = new VaultJobs({
     docs: wiring.docs,
     removals: removalQueue(app, wiring, moved),
-    entered: async (jobId, documentId) => {
-      const topic = uploads.topicOf(jobId);
-      const removed = topic ? records.of(topic, documentId) : undefined;
-      if (!removed || !cameBack(removed)) return;
-      await records.remove(removed.id);
-      moved(removed.topic);
-    },
+    entered: (jobId, documentId) =>
+      sentAgain(app, wiring, { jobId, documentId, moved }),
   });
   wiring.onDocIngest?.(jobs);
   return jobs;
@@ -99,6 +94,22 @@ function actorOf(
     canSee: (topic) => canSeeTopic(person, topic, parentOf),
     seesDocument: uploadActorOf(request, catalog).seesDocument,
   };
+}
+
+/** A document sent is there: one removed from there may be back with it. */
+async function sentAgain(
+  app: FastifyInstance,
+  { uploads, records }: DocumentRemovalsWiring,
+  input: { jobId: string; documentId: string; moved: (topic: string) => void },
+): Promise<void> {
+  const sent = uploads.sentOf(input.jobId);
+  const removed = sent && records.of(sent.topic, input.documentId);
+  if (!sent || !removed || !cameBack(removed)) return;
+  await records.remove(removed.id);
+  input.moved(removed.topic);
+  const { topic, by } = sent;
+  const document = input.documentId;
+  app.log.info({ what: 'sent-again', by, topic, document }, 'document removal');
 }
 
 /**
