@@ -16,16 +16,21 @@ import { MEDIA_POLL_MS } from '@features/media/media-polling.js';
 import {
   EMPTY,
   Subject,
+  asyncScheduler,
   catchError,
-  concatMap,
   exhaustMap,
   filter,
   finalize,
   merge,
+  switchMap,
+  throttleTime,
   timer,
   type Observable,
 } from 'rxjs';
 import { isSettled } from './upload-labels.js';
+
+/** A folder sends many at once: the list is read at most this often, and once at the end. */
+export const REFRESH_MS = 1_500;
 
 /** How much more one press of "Aumentar o teto" gives an inclusion. */
 export const RAISE_STEP_USD = 0.5;
@@ -64,7 +69,13 @@ export class DocumentUploadsStore {
     const beats = timer(0, this.pollMs).pipe(filter(() => this.moving()));
     merge(
       beats.pipe(exhaustMap(() => this.list())),
-      this.asked.pipe(concatMap(() => this.list())),
+      this.asked.pipe(
+        throttleTime(REFRESH_MS, asyncScheduler, {
+          leading: true,
+          trailing: true,
+        }),
+        switchMap(() => this.list()),
+      ),
     )
       .pipe(takeUntilDestroyed())
       .subscribe((items) => {

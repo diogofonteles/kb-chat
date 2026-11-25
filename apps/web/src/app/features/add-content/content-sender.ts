@@ -1,10 +1,5 @@
-import {
-  DestroyRef,
-  Injectable,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
   CreateDocumentUploadRequest,
@@ -24,6 +19,7 @@ import {
   concatMap,
   defer,
   filter,
+  fromEvent,
   map,
   of,
   retry,
@@ -110,8 +106,11 @@ const again = <T>() =>
  * Sends what the person included (KBC-184), one item after the other: a file is hashed in the
  * browser, announced and sent by tus (ADR 0033); a link is announced. What is already in the
  * collection says so. An item that fails never stops the next ones.
+ *
+ * It outlives the page: the person goes on in the app while a folder is sent, and finds the
+ * account again on coming back. Closing the tab is what stops it, so the browser asks first.
  */
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class ContentSender {
   private readonly api = inject(DocumentUploadsApi);
   private readonly media = inject(MediaApi);
@@ -152,9 +151,17 @@ export class ContentSender {
             }),
           ),
         ),
-        takeUntilDestroyed(inject(DestroyRef)),
+        takeUntilDestroyed(),
       )
       .subscribe();
+    const view = inject(DOCUMENT).defaultView;
+    if (view)
+      fromEvent<BeforeUnloadEvent>(view, 'beforeunload')
+        .pipe(
+          filter(() => this.busy()),
+          takeUntilDestroyed(),
+        )
+        .subscribe((event) => event.preventDefault());
   }
 
   add(sources: readonly ContentSource[], target: ContentTarget): void {
@@ -360,8 +367,6 @@ export class ContentSender {
     key: number,
     answer: CreateDocumentUploadResponse,
   ): string | null {
-    if (answer.outcome === 'duplicate' && answer.upload?.uploadUrl)
-      return answer.upload.uploadUrl;
     if (answer.outcome === 'duplicate') {
       this.put(key, {
         kind: 'duplicate',

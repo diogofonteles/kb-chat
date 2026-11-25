@@ -33,6 +33,7 @@ const anUpload = (fields: Partial<DocumentUpload> = {}): DocumentUpload => ({
   bytes: null,
   received: null,
   uploadUrl: null,
+  review: false,
   batch: null,
   heldBy: null,
   retriable: false,
@@ -190,15 +191,15 @@ describe('ContentSender (KBC-184)', () => {
 
   it('a file whose send stopped half-way goes on, instead of "a caminho"', async () => {
     const { api, sender } = setup();
+    // The API resumes the person's own announcement: the same item, with bytes already there.
     api.answer = () =>
-      of({
-        outcome: 'duplicate' as const,
-        document: null,
-        upload: anUpload({
+      of(
+        created({
           state: 'receiving',
+          received: 2,
           uploadUrl: '/api/v1/document-uploads/x/upload',
         }),
-      });
+      );
     const file = new File(['%PDF'], 'a.pdf');
     sender.add([{ kind: 'file', file, path: 'a.pdf' }], TARGET);
     await vi.waitFor(() => expect(phases(sender)).toEqual(['sending']));

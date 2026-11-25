@@ -3,7 +3,11 @@ import {
   HttpTestingController,
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
-import { provideZonelessChangeDetection, signal } from '@angular/core';
+import {
+  provideZonelessChangeDetection,
+  signal,
+  type WritableSignal,
+} from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import {
   ActivatedRoute,
@@ -16,7 +20,13 @@ import { ChatStore } from '@features/chat/chat-store.js';
 import { MEDIA_POLL_MS } from '@features/media/media-polling.js';
 import { fireEvent, render, screen, waitFor } from '@testing-library/angular';
 import { of } from 'rxjs';
+import { DocumentUploadsStore } from '@features/document-upload/document-uploads-store.js';
 import { AddContentPage } from './add-content-page.js';
+import {
+  ContentSender,
+  type ContentSend,
+  type SendPhase,
+} from './content-sender.js';
 
 const topic = (slug: string, title: string): Topic =>
   ({
@@ -271,6 +281,55 @@ describe('AddContentPage (KBC-184)', () => {
     const sending = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(sending);
     expect(sending.defaultPrevented).toBe(true);
+  });
+
+  it('leaving the page inside the app stops nothing: the sends go on and are found on coming back', async () => {
+    const { fixture, http } = await renderPage();
+    await typeLinks('https://example.org/1\nhttps://example.org/2', fixture);
+    fireEvent.click(include());
+    await fixture.whenStable();
+    const sender = TestBed.inject(ContentSender);
+    fixture.destroy();
+    expect(sender.busy()).toBe(true);
+    for (const n of [1, 2]) {
+      const asked = http.expectOne(
+        (one) => one.method === 'POST' && one.url.endsWith('/documents'),
+      );
+      expect(asked.request.body).toMatchObject({
+        url: `https://example.org/${n}`,
+      });
+      asked.flush({ outcome: 'duplicate', document: null, upload: null });
+    }
+    expect(sender.busy()).toBe(false);
+    expect(sender.summary()).toMatchObject({ total: 2, already: 2 });
+  });
+
+  it('the list is read again by how many arrived, never by the progress of each', async () => {
+    const { fixture } = await renderPage();
+    const uploads = fixture.debugElement.injector.get(DocumentUploadsStore);
+    const refresh = vi.spyOn(uploads, 'refresh');
+    const sender = TestBed.inject(ContentSender) as unknown as {
+      entries: WritableSignal<readonly ContentSend[]>;
+    };
+    const send = (key: number, phase: SendPhase): ContentSend => ({
+      key,
+      name: `a-${key}.pdf`,
+      source: { kind: 'url', url: `https://example.org/${key}` },
+      target: {
+        topic: 'hermetismo',
+        level: null,
+        batch: { id: crypto.randomUUID(), capUsd: 0.5 },
+      },
+      phase,
+    });
+    for (let percent = 0; percent < 50; percent += 1) {
+      sender.entries.set([
+        send(1, { kind: 'sent' }),
+        send(2, { kind: 'sending', percent }),
+      ]);
+      await fixture.whenStable();
+    }
+    expect(refresh).toHaveBeenCalledTimes(1);
   });
 
   it('who may not create collections has no "Novo acervo"', async () => {

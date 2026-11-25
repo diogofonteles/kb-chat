@@ -9,6 +9,7 @@ import {
   inject,
   linkedSignal,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { formatNumber } from '@angular/common';
@@ -150,11 +151,10 @@ const rootIn = (topics: readonly Topic[], slug: string): string =>
     UiIconButton,
     UploadPanel,
   ],
-  providers: [ContentCostsStore, ContentSender, DocumentUploadsStore],
+  providers: [ContentCostsStore, DocumentUploadsStore],
   templateUrl: './add-content-page.html',
   styleUrl: './add-content-page.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(window:beforeunload)': 'warnBeforeLeaving($event)' },
 })
 export class AddContentPage {
   private readonly route = inject(ActivatedRoute);
@@ -305,6 +305,7 @@ export class AddContentPage {
       ? $localize`:@@addContent.includeOne:Incluir 1 item`
       : $localize`:@@addContent.includeMany:Incluir ${count}:count: itens`;
   });
+  private readonly sentCount = computed(() => this.sender.summary().sent);
   private readonly estimateUsd = computed(() => this.costs.usd(this.counts()));
   /** The whole inclusion would not fit in the ceiling: said before, not in the middle. */
   protected readonly overCap = computed(() => {
@@ -324,9 +325,10 @@ export class AddContentPage {
     afterNextRender(() =>
       this.heading().nativeElement.focus({ preventScroll: true }),
     );
-    // What was just sent shows up in "Em processamento" without waiting for the next beat.
+    // What was just sent shows up in "Em processamento" without waiting for the next beat:
+    // by how many arrived, never by the progress of each.
     effect(() => {
-      if (this.sender.summary().sent > 0) this.uploads.refresh();
+      if (this.sentCount() > 0) untracked(() => this.uploads.refresh());
     });
   }
 
@@ -426,9 +428,5 @@ export class AddContentPage {
 
   protected mediaSent(): void {
     void this.router.navigateByUrl('/fila');
-  }
-
-  protected warnBeforeLeaving(event: BeforeUnloadEvent): void {
-    if (this.sender.busy()) event.preventDefault();
   }
 }

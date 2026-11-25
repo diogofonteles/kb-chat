@@ -9,7 +9,7 @@ import type { DocumentUpload } from '@kb-chat/contracts';
 import { MEDIA_POLL_MS } from '@features/media/media-polling.js';
 import { fireEvent, render, screen } from '@testing-library/angular';
 import { DocumentUploadsSection } from './document-uploads-section.js';
-import { DocumentUploadsStore } from './document-uploads-store.js';
+import { DocumentUploadsStore, REFRESH_MS } from './document-uploads-store.js';
 
 const URL = '/api/v1/document-uploads';
 
@@ -26,6 +26,7 @@ const upload = (fields: Partial<DocumentUpload>): DocumentUpload => ({
   bytes: 10,
   received: 10,
   uploadUrl: null,
+  review: false,
   batch: null,
   heldBy: null,
   retriable: false,
@@ -101,6 +102,31 @@ describe('Documentos em processamento (KBC-149 FR-2)', () => {
     expect(screen.getByText(/saiu vazia/)).toBeTruthy();
     await new Promise((resolve) => setTimeout(resolve, 60));
     http.expectNone(URL);
+  });
+
+  it('many asks at once are one read now and one at the end', async () => {
+    const { http, fixture } = await renderSection([
+      upload({ state: 'failed', failure: 'empty' }),
+    ]);
+    const store = fixture.debugElement.injector.get(DocumentUploadsStore);
+    vi.useFakeTimers();
+    try {
+      for (let n = 0; n < 100; n += 1) store.refresh();
+      http.expectOne(URL).flush({ items: [] });
+      vi.advanceTimersByTime(REFRESH_MS + 1);
+      http.expectOne(URL).flush({ items: [] });
+      vi.advanceTimersByTime(REFRESH_MS * 3);
+      http.expectNone(URL);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("what is in the collection and in kb's review says so", async () => {
+    const document = { id: 'raw/a.md', title: 'A' };
+    await renderSection([upload({ state: 'ready', document, review: true })]);
+    expect(screen.getByText('Pronto')).toBeTruthy();
+    expect(screen.getByText(/fila de revisão do dono/)).toBeTruthy();
   });
 
   it('shows nothing when nothing was sent', async () => {

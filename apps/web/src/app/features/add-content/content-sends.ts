@@ -41,8 +41,8 @@ const ALL_SHOWN = 12;
         @if (summary().active > 0) {
           <ui-progress [value]="share()" />
           <p class="hint" i18n="@@addContent.keepOpen">
-            Deixe esta página aberta até terminar. Se ela fechar, escolha a
-            mesma pasta de novo: só vai o que faltou.
+            Pode continuar usando o app; só não feche esta aba até terminar. Se
+            ela fechar, escolha a mesma pasta de novo: só vai o que faltou.
           </p>
         } @else if (summary().failed === 0) {
           <ui-banner

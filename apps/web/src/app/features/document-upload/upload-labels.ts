@@ -1,4 +1,5 @@
 import type {
+  DocumentUpload,
   DocumentUploadFailure,
   DocumentUploadState,
 } from '@kb-chat/contracts';
@@ -74,12 +75,17 @@ export const isWorking = (state: DocumentUploadState): boolean =>
   state === 'converting' || state === 'classifying' || state === 'mapping';
 
 /** "No mapa" waits for the next sync to the app; the rest waits for the Mac. */
-export const WAITING_HINTS: Partial<Record<DocumentUploadState, () => string>> =
-  {
-    received: () =>
-      $localize`:@@docUploads.hint.received:Na vez do Mac: ele liga sozinho quando há trabalho.`,
-    mapped: () =>
-      $localize`:@@docUploads.hint.mapped:Chega à busca com a próxima sincronização do acervo.`,
-    receiving: () =>
-      $localize`:@@docUploads.hint.receiving:Se o envio parou, inclua o mesmo arquivo de novo: ele continua de onde estava.`,
-  };
+const WAITING_HINTS: Partial<Record<DocumentUploadState, () => string>> = {
+  received: () =>
+    $localize`:@@docUploads.hint.received:Na vez do Mac: ele liga sozinho quando há trabalho.`,
+  mapped: () =>
+    $localize`:@@docUploads.hint.mapped:Chega à busca com a próxima sincronização do acervo.`,
+  receiving: () =>
+    $localize`:@@docUploads.hint.receiving:Se o envio parou, inclua o mesmo arquivo de novo: ele continua de onde estava.`,
+};
+
+/** What the person should know of it now: kb's own review first, else what it waits for. */
+export const hintOf = (upload: DocumentUpload): string =>
+  upload.review
+    ? $localize`:@@docUploads.hint.review:Está no acervo. O kb o deixou na fila de revisão do dono.`
+    : (WAITING_HINTS[upload.state]?.() ?? '');

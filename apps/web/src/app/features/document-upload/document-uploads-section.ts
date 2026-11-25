@@ -19,7 +19,7 @@ import { RecordingChooser } from './recording-chooser.js';
 import {
   FAILURE_TEXTS,
   STATE_LABELS,
-  WAITING_HINTS,
+  hintOf,
   isWorking,
 } from './upload-labels.js';
 
@@ -211,7 +211,7 @@ export class DocumentUploadsSection {
         : '',
       failure: upload.failure ? FAILURE_TEXTS[upload.failure]() : '',
       held: this.heldText(upload),
-      hint: WAITING_HINTS[upload.state]?.() ?? '',
+      hint: hintOf(upload),
       canRaise:
         upload.heldBy === 'batch-cap' &&
         upload.batch !== null &&
