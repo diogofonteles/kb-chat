@@ -216,6 +216,8 @@ const WORKER =
  * must answer Ana or the master 2xx at least once, so that its probe is not empty.
  */
 export const NO_CONTENT: Readonly<Record<string, string>> = {
+  'GET /api/v1/document-uploads/:id/entries':
+    'only who sent the list, and masters, while it waits for a choice (KBC-186): what the site names, nothing of the collection',
   'GET /api/v1/research/turns/:turnId/events':
     'only while a turn of the person runs; the probed turns end inside their request, whose stream is probed',
   'GET /api/v1/openrouter/callback':
