@@ -508,7 +508,9 @@ describe('ChatPage without collections', () => {
       .expectOne('/api/v1/topics')
       .error(new ProgressEvent('error'), { status: 0 });
     await view.fixture.whenStable();
-    expect(screen.getByRole('alert').textContent).toMatch(/servidor de busca/);
+    expect(screen.getByRole('alert').textContent).toMatch(
+      /falar com o servidor/,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
     TestBed.tick();
     http.expectOne('/api/v1/topics').flush(TOPICS);

@@ -145,6 +145,7 @@ interface Row {
                 (opened)="open(row.upload.topic, $event)"
                 (raised)="act(); store.raise(row.upload)"
                 (retried)="act(); store.retry(row.upload)"
+                (accepted)="act(); store.accept(row.upload)"
                 (removed)="act(); store.remove(row.upload)"
                 (chosen)="act(); store.choose(row.upload, $event)"
               />

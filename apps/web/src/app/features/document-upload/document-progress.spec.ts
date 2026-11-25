@@ -25,6 +25,7 @@ const upload = (fields: Partial<DocumentUpload>): DocumentUpload => ({
   review: false,
   entryCount: 0,
   mine: true,
+  refused: null,
   retriable: false,
   progress: {
     startedAt: null,

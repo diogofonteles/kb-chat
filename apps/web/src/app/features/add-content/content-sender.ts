@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { DOCUMENT } from '@angular/common';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -77,7 +78,9 @@ export interface ContentSend {
 /** The API's per-minute limit, or no network: the item waits and goes again by itself. */
 const WAIT_MS = 15_000;
 const TRIES = 20;
-const PASSING = new Set(['RATE_LIMITED', 'OFFLINE']);
+/** The API is starting again (a new version of it). */
+const isRestarting = (err: unknown): boolean =>
+  err instanceof HttpErrorResponse && err.status === 503;
 
 /** How a folder's send stands: every item is in one of them, so the sum always closes. */
 export interface SendSummary {
@@ -383,8 +386,9 @@ export class ContentSender {
       count: TRIES,
       delay: (err: unknown) => {
         const code = toUiErrorCode(err);
-        if (!PASSING.has(code)) return throwError(() => err);
-        const why = code === 'OFFLINE' ? 'offline' : 'limit';
+        const away = code === 'OFFLINE' || isRestarting(err);
+        if (!away && code !== 'RATE_LIMITED') return throwError(() => err);
+        const why = away ? 'offline' : 'limit';
         this.put(key, { kind: 'paused', why });
         return timer(WAIT_MS);
       },

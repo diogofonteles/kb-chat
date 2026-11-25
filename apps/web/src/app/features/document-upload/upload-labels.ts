@@ -55,7 +55,7 @@ const STATE_LABELS: Record<DocumentUploadState, StateLabel> = {
 };
 
 /** Why it did not enter, and what to do (PD-15). */
-export const FAILURE_TEXTS: Record<DocumentUploadFailure, () => string> = {
+const FAILURE_TEXTS: Record<DocumentUploadFailure, () => string> = {
   'conversion-failed': () =>
     $localize`:@@docUploads.failure.conversion:Não consegui converter. Confira se o arquivo abre ou se o link está no ar, e envie de novo.`,
   live: () =>
@@ -65,7 +65,7 @@ export const FAILURE_TEXTS: Record<DocumentUploadFailure, () => string> = {
   empty: () =>
     $localize`:@@docUploads.failure.empty:A conversão saiu vazia ou ilegível. Um escaneado muito apagado? Tente um arquivo melhor.`,
   'not-accepted': () =>
-    $localize`:@@docUploads.failure.notAccepted:O kb não aceitou o documento no acervo; ele ficou para revisão do dono.`,
+    $localize`:@@docUploads.failure.notAccepted:O kb deixou este documento de fora do acervo. Tente de novo para ver o que foi lido e decidir.`,
   'not-allowed': () =>
     $localize`:@@docUploads.failure.notAllowed:A gravação passa da cota de envio de quem a incluiu, ou essa pessoa não pode mais enviar para este acervo. Fale com um master.`,
   'gave-up': () =>
@@ -73,6 +73,37 @@ export const FAILURE_TEXTS: Record<DocumentUploadFailure, () => string> = {
   'upload-abandoned': () =>
     $localize`:@@docUploads.failure.abandoned:O envio parou no meio e expirou. Envie de novo.`,
 };
+
+/** Why kb left it out, in the person's words; kb's own reasons (`triage_reason`). */
+const REFUSED_TEXTS: Readonly<Record<string, () => string>> = {
+  thin: () =>
+    $localize`:@@docUploads.refused.thin:Quase não há texto aqui. Costuma ser a tela de entrada do site, ou só imagens e menus.`,
+  paywall: () =>
+    $localize`:@@docUploads.refused.paywall:O texto está atrás de um login ou de uma assinatura.`,
+  off_topic: () =>
+    $localize`:@@docUploads.refused.offTopic:Não parece ser sobre este acervo.`,
+  duplicate: () =>
+    $localize`:@@docUploads.refused.duplicate:É o mesmo texto de outro documento do acervo.`,
+};
+
+/** Why it did not enter, for this item: what was refused says kb's reason and who decides. */
+export function failureTextOf({
+  failure,
+  kind,
+  refused,
+}: DocumentUpload): string {
+  if (failure === null) return '';
+  if (failure === 'empty' && kind === 'list')
+    return $localize`:@@docUploads.failure.emptyList:Não há gravações nesta lista.`;
+  if (!refused) return FAILURE_TEXTS[failure]();
+  const why =
+    REFUSED_TEXTS[refused.why]?.() ??
+    $localize`:@@docUploads.refused.other:O kb não o reconheceu como conteúdo deste acervo.`;
+  const who = refused.acceptable
+    ? $localize`:@@docUploads.refused.you:Ficou de fora até você decidir.`
+    : $localize`:@@docUploads.refused.master:Ficou de fora até um master decidir.`;
+  return `${why} ${who}`;
+}
 
 /** States that will not change by themselves: nothing more to poll for. */
 export const isSettled = (state: DocumentUploadState): boolean =>
@@ -98,6 +129,7 @@ const YOURS: StateLabel = {
 /** Its state in words: what the Mac does depends on what it is. */
 export function labelOf(upload: DocumentUpload): StateLabel {
   const { kind, state, progress } = upload;
+  if (upload.refused?.acceptable) return YOURS;
   if (state === 'converting' && kind === 'recording') return DOWNLOADING;
   if (state === 'converting' && kind === 'list') return LISTING;
   if (state === 'transcribing' && progress.media?.step === 'publishing')

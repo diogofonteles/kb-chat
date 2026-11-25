@@ -170,7 +170,7 @@ export class ContentEstimate {
     if (usd < CENT)
       return $localize`:@@estimate.lessThanCent:menos de US$ 0,01`;
     const value = formatNumber(
-      Math.ceil(usd * 100) / 100,
+      Math.ceil(usd * 100 - 1e-9) / 100,
       this.locale,
       '1.2-2',
     );

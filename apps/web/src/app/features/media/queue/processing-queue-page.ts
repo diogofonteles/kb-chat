@@ -6,8 +6,10 @@ import {
   LOCALE_ID,
   afterRenderEffect,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
   viewChild,
   viewChildren,
 } from '@angular/core';
@@ -90,6 +92,7 @@ export class ProcessingQueuePage {
   private readonly destroyRef = inject(DestroyRef);
   private readonly heading =
     viewChild.required<ElementRef<HTMLElement>>('heading');
+  private readonly body = viewChild.required<ElementRef<HTMLElement>>('body');
   private readonly rows = viewChildren(QueueRow);
   protected readonly store = inject(ProcessingQueueStore);
   private readonly documents = inject(DocumentUploadsStore);
@@ -167,6 +170,12 @@ export class ProcessingQueuePage {
 
   constructor() {
     this.store.refresh();
+    // Before what holds the focus goes away for "Nada processando" (WCAG 2.4.3).
+    effect(() => {
+      if (!this.empty()) return;
+      const body = untracked(this.body).nativeElement;
+      if (body.contains(body.ownerDocument.activeElement)) this.focusHeading();
+    });
     // A row may change section, and a new row takes its place: only the new reading tells.
     afterRenderEffect(() => {
       const queue = this.store.queue();

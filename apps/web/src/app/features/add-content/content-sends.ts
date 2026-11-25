@@ -17,8 +17,8 @@ import { ContentSender } from './content-sender.js';
 
 const alreadyText = (n: number): string =>
   n === 1
-    ? $localize`:@@addContent.sumAlreadyOne:1 já estava`
-    : $localize`:@@addContent.sumAlready:${n}:count: já estavam`;
+    ? $localize`:@@addContent.sumAlreadyOne:1 já estava aqui ou a caminho`
+    : $localize`:@@addContent.sumAlready:${n}:count: já estavam aqui ou a caminho`;
 const failedText = (n: number): string =>
   n === 1
     ? $localize`:@@addContent.sumFailedOne:1 falhou`
@@ -57,14 +57,21 @@ const ALL_SHOWN = 12;
           </p>
         } @else if (summary().failed + summary().givenUp === 0) {
           <ui-banner
-            tone="ok"
-            title="Tudo o que você incluiu chegou"
-            i18n-title="@@addContent.allSentTitle"
+            [tone]="summary().sent > 0 ? 'ok' : 'info'"
+            [title]="endTitle()"
             role="status"
           >
-            <span i18n="@@addContent.allSent"
-              >O Mac converte e põe no acervo; acompanhe abaixo.</span
-            >
+            @if (summary().already > 0) {
+              <span i18n="@@addContent.notAgain"
+                >O que já está aqui, ou vem a caminho por outra pessoa, não foi
+                enviado de novo.</span
+              >
+            }
+            @if (summary().sent > 0) {
+              <span i18n="@@addContent.allSent"
+                >O Mac converte e põe no acervo; acompanhe abaixo.</span
+              >
+            }
             @if (hasAudio()) {
               <a routerLink="/fila" i18n="@@addContent.audioQueue"
                 >Os áudios seguem na Fila de processamento.</a
@@ -85,7 +92,7 @@ const ALL_SHOWN = 12;
                 size="sm"
                 type="button"
                 class="retry"
-                (click)="sender.retryFailed()"
+                (click)="retryFailed()"
               >
                 <span i18n="@@addContent.retryFailed"
                   >Tentar de novo ({{ summary().failed }})</span
@@ -112,7 +119,7 @@ const ALL_SHOWN = 12;
               <app-content-send-row
                 [send]="one"
                 [topicTitle]="mixed() ? titleOf(one.target.topic) : ''"
-                (retried)="sender.retry(one.key)"
+                (retried)="retry(one.key)"
                 (removed)="remove(one.key)"
                 (opened)="
                   opened.emit({
@@ -218,6 +225,15 @@ export class ContentSends {
         : []),
     ].join(' · ');
   });
+  /** Nothing is said to have come that did not. */
+  protected readonly endTitle = computed(() => {
+    const { sent, already } = this.summary();
+    if (already === 0)
+      return $localize`:@@addContent.allSentTitle:Tudo o que você incluiu chegou`;
+    return sent > 0
+      ? $localize`:@@addContent.restSentTitle:O que faltava chegou`
+      : $localize`:@@addContent.nothingNewTitle:Nada novo para enviar`;
+  });
   protected readonly hasAudio = computed(() =>
     this.sender.sends().some((one) => one.source.kind === 'audio'),
   );
@@ -245,6 +261,16 @@ export class ContentSends {
 
   protected titleOf(topic: string): string {
     return this.titles().get(topic) ?? topic;
+  }
+
+  protected retry(key: number): void {
+    this.sender.retry(key);
+    this.keepFocus();
+  }
+
+  protected retryFailed(): void {
+    this.sender.retryFailed();
+    this.keepFocus();
   }
 
   protected remove(key: number): void {

@@ -180,8 +180,8 @@ export class RecordingChooser {
           .filter((url) => before?.value.has(url) === true),
       ),
   });
-  protected readonly allChosen = computed(
-    () => this.chosen().size === this.entries().length,
+  protected readonly allChosen = computed(() =>
+    this.entries().every((one) => this.chosen().has(one.url)),
   );
   protected readonly someChosen = computed(
     () => this.chosen().size > 0 && !this.allChosen(),

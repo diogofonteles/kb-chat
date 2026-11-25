@@ -10,6 +10,7 @@ import type {
 import type { Feature } from '@kb-chat/contracts';
 import {
   CSRF,
+  OWNER_EMAIL,
   expect,
   invite,
   ownerApi,
@@ -537,6 +538,54 @@ test('KBC-184: many items have filters, the queue counts them, and the Mac that 
       document.documentElement.clientWidth,
   );
   expect(wide).toBeLessThanOrEqual(0);
+});
+
+test('KBC-009: what kb refused is read and decided on its own row: in all the same, or left out', async ({
+  browser,
+  viewport,
+}, testInfo) => {
+  const { page, topic, owner } = await person(browser, viewport);
+  const tag = uniqueTag();
+  const links = [1, 2].map((n) => `https://raso.example/${tag}-${n}`);
+  const add = await openAdd(page);
+  await includeLinks(add, links);
+  await runMac(owner, topic);
+  // Who sent it reads why and what was read; a master decides.
+  const hers = processing(add, links[0] ?? '');
+  await expect(hers.getByText(/até um master decidir/)).toBeVisible();
+  await hers.getByRole('button', { name: 'Ver o que foi lido' }).click();
+  await expect(
+    hers.getByRole('region', { name: 'O que foi lido' }),
+  ).toContainText('Esqueceu a senha?');
+  await expect(
+    hers.getByRole('button', { name: 'Incluir mesmo assim' }),
+  ).toHaveCount(0);
+
+  // A master sees everyone's: here, of this collection alone.
+  const master = await pageWith(browser, OWNER_EMAIL, { viewport });
+  await master.goto(`/adicionar?acervo=${topic}`);
+  const queue = master.locator('app-add-content-page');
+  const row = processing(queue, links[0] ?? '');
+  await expect(row.getByText('Espera você')).toBeVisible();
+  await row.getByRole('button', { name: 'Ver o que foi lido' }).click();
+  await row.scrollIntoViewIfNeeded();
+  await master.screenshot({ path: testInfo.outputPath('refused.png') });
+  const serious = (
+    await new AxeBuilder({ page: master })
+      .include('app-document-uploads-section')
+      .analyze()
+  ).violations.filter((v) => ['serious', 'critical'].includes(v.impact ?? ''));
+  expect(serious).toEqual([]);
+  await row.getByRole('button', { name: 'Incluir mesmo assim' }).click();
+  await expect(row.getByText('Espera você')).toHaveCount(0);
+  const other = processing(queue, links[1] ?? '');
+  await other.getByRole('button', { name: 'Ver o que foi lido' }).click();
+  await other.getByRole('button', { name: 'Deixar de fora' }).click();
+  await expect(other).toHaveCount(0);
+
+  await runMac(owner, topic);
+  await expect(hers.getByText('Pronto', { exact: true })).toBeVisible();
+  await expect(processing(add, links[1] ?? '')).toHaveCount(0);
 });
 
 for (const theme of ['light', 'dark', 'esoteric'] as const) {

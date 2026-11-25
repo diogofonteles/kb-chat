@@ -34,6 +34,14 @@ import { isSettled } from './upload-labels.js';
 /** A folder sends many at once: the list is read at most this often, and once at the end. */
 export const REFRESH_MS = 1_500;
 
+/** Another tab, or another person, did something about it first. */
+function problemOf(err: unknown): string {
+  const code = toUiErrorCode(err);
+  return code === 'NOT_FOUND' || code === 'MEDIA_CONFLICT'
+    ? $localize`:@@docUploads.changed:Este item mudou enquanto isso. A lista foi atualizada.`
+    : errorMessage(code);
+}
+
 /** Up to this many items the list is read at every beat. */
 const ITEMS_PER_BEAT = 300;
 
@@ -138,6 +146,11 @@ export class DocumentUploadsStore {
     this.act(upload.id, this.api.retry(upload.id));
   }
 
+  /** What kb refused enters all the same (masters). */
+  accept(upload: DocumentUpload): void {
+    this.act(upload.id, this.api.accept(upload.id));
+  }
+
   /** These, seen ready, leave the list. */
   clearReady(ids: readonly string[]): void {
     this.act(CLEARING, this.api.clearReady(ids));
@@ -164,7 +177,7 @@ export class DocumentUploadsStore {
       .subscribe({
         next: () => this.refresh(),
         error: (err: unknown) => {
-          this.problem.set(errorMessage(toUiErrorCode(err)));
+          this.problem.set(problemOf(err));
           this.refresh();
         },
       });

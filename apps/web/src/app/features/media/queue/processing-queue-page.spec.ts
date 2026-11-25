@@ -301,6 +301,7 @@ describe('ProcessingQueuePage (T23, KBC-090)', () => {
       review: false,
       entryCount: 0,
       mine: true,
+      refused: null,
       retriable: false,
       progress: {
         startedAt: null,
@@ -326,5 +327,60 @@ describe('ProcessingQueuePage (T23, KBC-090)', () => {
     expect(
       screen.getByText('4 itens · 2 precisam de você · 2 a seguir'),
     ).toBeTruthy();
+  });
+
+  it('cleared to nothing by the keyboard, the focus goes to the title (WCAG 2.4.3)', async () => {
+    const { http, fixture } = await open(aQueue());
+    const done = { id: crypto.randomUUID() };
+    http.expectOne('/api/v1/document-uploads').flush({
+      items: [
+        {
+          id: done.id,
+          topic: 'hermetismo',
+          kind: 'url',
+          name: 'https://a.example',
+          state: 'ready',
+          failure: null,
+          detail: null,
+          document: { id: 'raw/a.md', title: 'A' },
+          mediaId: null,
+          bytes: null,
+          received: null,
+          uploadUrl: null,
+          batch: null,
+          heldBy: null,
+          review: false,
+          entryCount: 0,
+          mine: true,
+          refused: null,
+          retriable: false,
+          progress: {
+            startedAt: null,
+            position: null,
+            startsInSeconds: null,
+            takesSeconds: null,
+            media: null,
+          },
+          createdAt: '2026-11-25T10:00:00.000Z',
+          updatedAt: '2026-11-25T10:00:00.000Z',
+        },
+      ],
+    });
+    await settle(fixture);
+    const clear = screen.getByRole('button', { name: 'Limpar prontos (1)' });
+    clear.focus();
+    clear.click();
+    http
+      .expectOne('/api/v1/document-uploads/clear-ready')
+      .flush({ cleared: 1 });
+    await settle(fixture);
+    http
+      .match('/api/v1/document-uploads')
+      .forEach((one) => one.flush({ items: [] }));
+    await settle(fixture);
+    expect(screen.getByText('Nada sendo processado agora.')).toBeTruthy();
+    expect(document.activeElement?.textContent).toContain(
+      'Fila de processamento',
+    );
   });
 });

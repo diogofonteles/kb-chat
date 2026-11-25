@@ -19,6 +19,9 @@ const withScheme = (part: string): string =>
     ? `https://${part}`
     : part;
 
+/** A space, or a comma that ends an address: one inside it is its own (`/0,,MUL1-5605,00.html`). */
+const BETWEEN = /\s+|[,;]+(?=\s|$|https?:\/\/|www\.)/i;
+
 /**
  * One address per line; several on one line (spaces, commas) count each. A line with no
  * address in it is refused whole, as typed; a repeated address counts once.
@@ -29,9 +32,7 @@ export function parseLinks(text: string): ParsedLinks {
     .map((line) => line.trim())
     .filter((line) => line !== '')
     .flatMap((line) =>
-      /https?:\/\//i.test(line)
-        ? line.split(/[\s,;]+/).filter(Boolean)
-        : [line],
+      /https?:\/\//i.test(line) ? line.split(BETWEEN).filter(Boolean) : [line],
     )
     .map(withScheme);
   const links = new Map<string, ContentLink>();

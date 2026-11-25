@@ -3,9 +3,14 @@ import type { DocumentUpload, DocumentWork } from '@kb-chat/contracts';
 /** Where an item is for the person: at work, in line, waiting for them, ended. */
 export type UploadPhase = 'active' | 'yours' | 'waiting' | 'failed' | 'ready';
 
-/** A recording transcribed whose tracks wait for a person. */
-const waitsForPerson = ({ state, progress }: DocumentUpload): boolean =>
+/** A choice, what kb refused (for who may decide), or a recording that waits for a person. */
+const waitsForPerson = ({
+  state,
+  progress,
+  refused,
+}: DocumentUpload): boolean =>
   state === 'choosing' ||
+  refused?.acceptable === true ||
   (state === 'transcribing' && progress.media?.step === 'attention');
 
 export function phaseOf(upload: DocumentUpload): UploadPhase {
@@ -157,7 +162,7 @@ function mediaText({ progress }: DocumentUpload): string {
     publishing: () =>
       $localize`:@@docProgress.media.publishing:Transcrito; o kb classifica e publica`,
     attention: () =>
-      $localize`:@@docProgress.media.attention:Transcrito; espera você na Fila de processamento`,
+      $localize`:@@docProgress.media.attention:Espera você na Fila de processamento`,
   };
   const text = texts[media.step]();
   return media.percent === null

@@ -62,7 +62,9 @@ test('AC-1: a person who may upload sends an MP3, sees it go to "Pronta" and ope
   // The rule before the choice ("· até 4 GB cada"; a phone's sheet leaves "cada" out).
   await expect(
     dialog
-      .getByText(/^mp3, m4a, wav, flac, ogg, opus ou vídeo · até 4 GB( cada)?$/)
+      .getByText(
+        /^mp3, m4a, wav, flac, ogg, opus ou vídeo( \(mp4, mov, webm, mkv\))? · até 4 GB( cada)?$/,
+      )
       .and(page.locator(':visible')),
   ).toBeVisible();
   await dialog.locator('input[type="file"]').setInputFiles(file);

@@ -48,6 +48,7 @@ const anUpload = (fields: Partial<DocumentUpload> = {}): DocumentUpload => ({
   },
   entryCount: 0,
   mine: true,
+  refused: null,
   createdAt: '2026-11-25T10:00:00.000Z',
   updatedAt: '2026-11-25T10:00:00.000Z',
   ...fields,

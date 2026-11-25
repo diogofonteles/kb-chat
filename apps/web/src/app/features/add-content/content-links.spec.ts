@@ -47,4 +47,20 @@ describe('parseLinks (KBC-184)', () => {
   it('answers nothing for an empty field', () => {
     expect(parseLinks('  \n ')).toEqual({ links: [], refused: [] });
   });
+
+  it.each([
+    [
+      'http://g1.globo.com/Noticias/SaoPaulo/0,,MUL1234-5605,00.html',
+      ['http://g1.globo.com/Noticias/SaoPaulo/0,,MUL1234-5605,00.html'],
+    ],
+    [
+      'https://a.org/1,https://a.org/2; https://a.org/3,',
+      ['https://a.org/1', 'https://a.org/2', 'https://a.org/3'],
+    ],
+    ['https://a.org/x;v=1?a=1,2', ['https://a.org/x;v=1?a=1,2']],
+  ])('a comma inside an address is its own: %s', (text, urls) => {
+    const { links, refused } = parseLinks(text);
+    expect(links.map((one) => one.url)).toEqual(urls);
+    expect(refused).toEqual([]);
+  });
 });

@@ -41,6 +41,7 @@ const upload = (fields: Partial<DocumentUpload>): DocumentUpload => ({
   },
   entryCount: 0,
   mine: true,
+  refused: null,
   createdAt: '2026-11-16T10:00:00.000Z',
   updatedAt: '2026-11-16T10:00:00.000Z',
   ...fields,
@@ -324,13 +325,19 @@ describe('Documentos em processamento (KBC-149 FR-2)', () => {
       .expectOne(`${URL}/${list.id}/entries`)
       .flush(null, { status: 503, statusText: 'Service Unavailable' });
     await fixture.whenStable();
-    fireEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    const again = screen.getByRole('button', { name: 'Tentar de novo' });
+    again.focus();
+    fireEvent.click(again);
     await tick();
+    // Its button is gone: the focus is where the list will be (WCAG 2.4.3).
+    const held = document.activeElement;
+    expect(held?.classList.contains('box')).toBe(true);
     http.expectOne(`${URL}/${list.id}/entries`).flush({
       entries: [{ url: 'https://youtu.be/1', title: 'Aula 1', durationS: 60 }],
     });
     await fixture.whenStable();
     expect(screen.getByRole('checkbox', { name: /Aula 1/ })).toBeTruthy();
+    expect(document.activeElement).toBe(held);
   });
 });
 
@@ -481,7 +488,7 @@ describe('what is being done (KBC-184)', () => {
     {
       media: { step: 'attention', percent: null },
       pill: 'Espera você',
-      text: /espera você na Fila/,
+      text: /Espera você na Fila/,
     },
   ] as const)(
     'a recording in the library that is $media.step says so',
@@ -588,4 +595,108 @@ describe('what is being done (KBC-184)', () => {
       expect(document.body.textContent).not.toContain('em instantes');
     },
   );
+});
+
+describe('what kb refused (KBC-009)', () => {
+  const refused = (fields: Partial<DocumentUpload['refused'] & object> = {}) =>
+    upload({
+      kind: 'url',
+      name: 'Vídeo do site',
+      state: 'failed',
+      failure: 'not-accepted',
+      detail: 'kb triage: quarantined',
+      retriable: true,
+      refused: {
+        why: 'thin',
+        excerpt: '# Entrar\n\nEsqueceu a senha?',
+        acceptable: true,
+        ...fields,
+      },
+    });
+
+  it('a master reads why, sees what was read, and puts it in all the same', async () => {
+    const one = refused();
+    const { http, fixture } = await renderSection([one], null, {
+      master: true,
+    });
+    expect(screen.getByText('Espera você')).toBeTruthy();
+    expect(
+      screen.getByText(/tela de entrada do site.*até você decidir/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/quarantined/)).toBeNull();
+    const show = screen.getByRole('button', { name: 'Ver o que foi lido' });
+    expect(show.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(show);
+    await fixture.whenStable();
+    expect(
+      screen.getByRole('region', { name: 'O que foi lido' }).textContent,
+    ).toContain('Esqueceu a senha?');
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Incluir mesmo assim' }),
+    );
+    http.expectOne(`${URL}/${one.id}/accept`).flush({});
+    http
+      .match(URL)
+      .forEach((req) =>
+        req.flush({ items: [{ ...one, state: 'received', refused: null }] }),
+      );
+    await fixture.whenStable();
+    expect(screen.queryByText(/até você decidir/)).toBeNull();
+    expect(document.activeElement?.textContent).toContain(
+      'Documentos em processamento',
+    );
+  });
+
+  it('left out, it leaves the list', async () => {
+    const one = refused({ why: 'off_topic' });
+    const { http, fixture } = await renderSection([one]);
+    expect(screen.getByText(/Não parece ser sobre este acervo/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver o que foi lido' }));
+    await fixture.whenStable();
+    fireEvent.click(screen.getByRole('button', { name: 'Deixar de fora' }));
+    const gone = http.expectOne(`${URL}/${one.id}`);
+    expect(gone.request.method).toBe('DELETE');
+    gone.flush(null);
+  });
+
+  it('who is not a master sees why and what was read, and that a master decides', async () => {
+    const { fixture } = await renderSection([
+      refused({ acceptable: false, why: 'algo_novo', excerpt: '' }),
+    ]);
+    expect(screen.getByText('Falhou')).toBeTruthy();
+    expect(screen.getByText(/até um master decidir/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver o que foi lido' }));
+    await fixture.whenStable();
+    expect(screen.getByText('(nenhum texto)')).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Incluir mesmo assim' }),
+    ).toBeNull();
+  });
+
+  it('decided in another place first, it says so and reads the list again', async () => {
+    const one = refused();
+    const { http, fixture } = await renderSection([one]);
+    fireEvent.click(screen.getByRole('button', { name: 'Ver o que foi lido' }));
+    await fixture.whenStable();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Incluir mesmo assim' }),
+    );
+    http
+      .expectOne(`${URL}/${one.id}/accept`)
+      .flush(
+        { error: { code: 'MEDIA_CONFLICT', message: 'x' } },
+        { status: 409, statusText: 'Conflict' },
+      );
+    await fixture.whenStable();
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Este item mudou enquanto isso',
+    );
+  });
+
+  it('a channel with nothing in it says that, not of a scan', async () => {
+    await renderSection([
+      upload({ kind: 'list', state: 'failed', failure: 'empty' }),
+    ]);
+    expect(screen.getByText('Não há gravações nesta lista.')).toBeTruthy();
+  });
 });

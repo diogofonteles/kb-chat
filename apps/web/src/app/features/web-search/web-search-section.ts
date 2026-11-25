@@ -69,6 +69,12 @@ const KIND_ICONS: Record<WebSearchKind, IconName> = {
   video: 'play',
 };
 
+/** Stopped before the first result, nothing is known of what there is. */
+const noneText = (subject: string, exhausted: boolean): string =>
+  exhausted
+    ? $localize`:@@webSearch.none:Nada encontrado para “${subject}:subject:”`
+    : $localize`:@@webSearch.noneYet:Ainda sem resultados para “${subject}:subject:”`;
+
 /**
  * "Pesquisar na web" (KBC-185): texts, audios and videos found on the web, to pick from. They
  * come picked, but what the collection already has; nothing is added here: what is picked
@@ -237,7 +243,7 @@ export class WebSearchSection {
     const text =
       found > 0
         ? countLabel(found)
-        : $localize`:@@webSearch.none:Nada encontrado para “${search.asked.request.query}:subject:”`;
+        : noneText(search.asked.request.query, search.exhausted);
     return [`${text}.`, this.credits()].filter(Boolean).join(' ');
   });
 

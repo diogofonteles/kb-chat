@@ -90,6 +90,11 @@ export class DocumentUploadsApi {
     return this.http.post(`${documentUploadsUrl()}/${id}/retry`, {});
   }
 
+  /** What kb refused enters the collection all the same (masters, KBC-009). */
+  accept(id: string): Observable<unknown> {
+    return this.http.post(`${documentUploadsUrl()}/${id}/accept`, {});
+  }
+
   /** Cancels an item the Mac does not have, or takes one that ended off the list. */
   remove(id: string): Observable<unknown> {
     return this.http.delete(`${documentUploadsUrl()}/${id}`);

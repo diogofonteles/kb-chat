@@ -89,7 +89,7 @@ export function errorDetailsOf(err: unknown): unknown {
 
 const MESSAGES: Record<UiErrorCode, () => string> = {
   OFFLINE: () =>
-    $localize`:@@error.offline:Não consegui falar com o servidor de busca. Verifique se ele está rodando (pnpm dev:api).`,
+    $localize`:@@error.offline:Não consegui falar com o servidor. Verifique sua internet e tente de novo.`,
   SEARCH_UNAVAILABLE: () =>
     $localize`:@@error.searchUnavailable:A busca está indisponível agora. Tente de novo em instantes.`,
   INDEX_MISSING: () =>

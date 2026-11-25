@@ -16,7 +16,8 @@ import {
 import { UiButton, UiIcon, UiIconButton, UiPill } from '@ui/index.js';
 import { statusText, stepsOf } from './document-progress.js';
 import { ListEntries } from './list-entries.js';
-import { FAILURE_TEXTS, hintOf, isWorking, labelOf } from './upload-labels.js';
+import { RefusedReview } from './refused-review.js';
+import { failureTextOf, hintOf, isWorking, labelOf } from './upload-labels.js';
 
 const ICONS = {
   file: 'file',
@@ -32,7 +33,7 @@ const ICONS = {
  */
 @Component({
   selector: 'app-document-upload-row',
-  imports: [ListEntries, UiButton, UiIcon, UiIconButton, UiPill],
+  imports: [ListEntries, RefusedReview, UiButton, UiIcon, UiIconButton, UiPill],
   template: `
     <span class="art" aria-hidden="true">
       <ui-icon [name]="icon()" [size]="20" />
@@ -53,7 +54,7 @@ const ICONS = {
       @if (hint(); as text) {
         <p class="hint">{{ text }}</p>
       }
-      @if (upload().detail; as detail) {
+      @if (detail(); as detail) {
         <p class="detail">{{ detail }}</p>
       }
     </div>
@@ -121,6 +122,15 @@ const ICONS = {
         <span class="visually-hidden">{{ text }}</span>
       }
     }
+    @if (upload().refused; as refused) {
+      <app-refused-review
+        class="chooser"
+        [refused]="refused"
+        [disabled]="busy()"
+        (accepted)="accepted.emit()"
+        (discarded)="removed.emit()"
+      />
+    }
     @if (upload().entryCount > 0) {
       <app-list-entries
         class="chooser"
@@ -147,6 +157,7 @@ export class DocumentUploadRow {
   readonly opened = output<UploadedDocumentRef>();
   readonly raised = output();
   readonly retried = output();
+  readonly accepted = output();
   readonly removed = output();
   readonly chosen = output<readonly string[]>();
 
@@ -159,9 +170,11 @@ export class DocumentUploadRow {
     return $localize`:@@docProgress.stepOf:Etapa ${steps.at + 1}:at: de ${steps.words.length}:total:`;
   });
   protected readonly hint = computed(() => hintOf(this.upload()));
-  protected readonly failure = computed(() => {
-    const { failure } = this.upload();
-    return failure ? FAILURE_TEXTS[failure]() : '';
+  protected readonly failure = computed(() => failureTextOf(this.upload()));
+  /** What was refused is said in words: kb's own add nothing. */
+  protected readonly detail = computed(() => {
+    const { detail, refused } = this.upload();
+    return refused ? null : detail;
   });
   protected readonly status = computed(() =>
     statusText(this.upload(), this.at()),
