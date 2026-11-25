@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .kb_publish import KbPublisher, KbStepFailed
+from .recording_file import NotARecording, fetch_file, is_known_site
 
 # kb-map's project, next to this one in the repository (tools/kb-map).
 KB_MAP_PROJECT = Path(__file__).resolve().parents[3] / "kb-map"
@@ -36,6 +37,8 @@ LIST_TIMEOUT_S = 5 * 60
 # The most of a channel or playlist the app offers (RECORDING_LIST_MAX in the contracts).
 LIST_MAX = 200
 OUTPUT_CHARS = 2_000
+# How kb-map ends when its budget does.
+BUDGET_EXIT = 3
 # The app's limit for a document's title (uploadedDocumentRefSchema).
 TITLE_CHARS = 500
 log = logging.getLogger("transcriber")
@@ -156,6 +159,9 @@ class KbMapCli:
         lines = [line for line in done.stdout.splitlines() if line.startswith("{")]
         if not lines:
             output = (done.stdout + done.stderr).strip()
+            # kb-map's exit 3: the budget ended before anything was made. It waits for more.
+            if done.returncode == BUDGET_EXIT:
+                raise KbStepFailed("kb-map convert", output)
             raise DocIngestFailed("conversion-failed", f"kb-map convert: {output}")
         return json.loads(lines[-1])
 
@@ -250,6 +256,12 @@ class YtDlp:
         return [self.binary, "--ignore-config", *runtime, *args]
 
     def download(self, url: str, folder: Path) -> Path:
+        # Any other site is fetched by this Mac itself, never by yt-dlp (recording_file.py).
+        if not is_known_site(url):
+            try:
+                return fetch_file(url, folder)
+            except NotARecording as err:
+                raise DocIngestFailed("conversion-failed", str(err)) from err
         # Named after the recording: the app takes its title from the file's name.
         template = str(folder / "%(title).120B [%(id)s].%(ext)s")
         command = self._command("--no-playlist", "--playlist-items", "1")
@@ -270,6 +282,8 @@ class YtDlp:
         raise AssertionError("unreachable")
 
     def entries(self, url: str) -> list[dict]:
+        if not is_known_site(url):
+            raise DocIngestFailed("conversion-failed", "not a list of a known site")
         command = self._command("--flat-playlist", "-J")
         command += ["--playlist-end", str(LIST_MAX), "--", url]
         done = self._run(command, LIST_TIMEOUT_S)

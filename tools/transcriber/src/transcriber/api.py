@@ -40,6 +40,7 @@ def _why(answer: bytes) -> str:
 
 # Waits before saying again what the API was not there to hear (under a lease's 10 min).
 UNREACHABLE_WAITS_S = (2, 5, 10, 20, 40)
+GATEWAY_ERRORS = frozenset({502, 503, 504})
 log = logging.getLogger("transcriber")
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -275,12 +276,17 @@ class ApiClient:
         says is said again for a while. Answered twice, the second says the lease is gone."""
         for wait in (*UNREACHABLE_WAITS_S, None):
             try:
-                return self._post(path, body)
+                status, answer = self._post(path, body)
+                # Behind its proxy an API that restarts is a gateway's error.
+                if status not in GATEWAY_ERRORS or wait is None:
+                    return status, answer
+                why = f"HTTP {status}"
             except ApiError as err:
                 if err.status is not None or wait is None:
                     raise
-                log.warning("the API is unreachable, again in %d s: %s", wait, err)
-                time.sleep(wait)
+                why = str(err)
+            log.warning("the API is unreachable, again in %d s: %s", wait, why)
+            time.sleep(wait)
         raise AssertionError("unreachable")
 
     def _post(self, path: str, body: dict) -> tuple[int, bytes]:

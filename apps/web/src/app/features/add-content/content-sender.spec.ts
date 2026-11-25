@@ -285,6 +285,31 @@ describe('ContentSender (KBC-184)', () => {
     expect(phases(sender)).toEqual(['sent']);
   });
 
+  it('a paused item taken off the list never goes, and the next does', () => {
+    vi.useFakeTimers();
+    try {
+      const { api, sender } = setup();
+      api.answer = (n) =>
+        n === 1
+          ? throwError(() => new HttpErrorResponse({ status: 0 }))
+          : of(created());
+      sender.add(
+        [link('https://example.org/1'), link('https://example.org/2')],
+        TARGET,
+      );
+      expect(phases(sender)).toEqual(['paused', 'waiting']);
+      sender.remove(sender.sends()[0]?.key ?? 0);
+      vi.advanceTimersByTime(60_000);
+      expect(
+        api.asked.map(({ request }) => 'url' in request && request.url),
+      ).toEqual(['https://example.org/1', 'https://example.org/2']);
+      expect(phases(sender)).toEqual(['sent']);
+      expect(sender.busy()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a failed item taken off the list still counts as not arrived', () => {
     const { api, sender } = setup();
     api.answer = (n) =>

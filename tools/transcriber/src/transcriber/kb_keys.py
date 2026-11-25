@@ -24,9 +24,12 @@ KEY_PATTERN = re.compile(r"^[A-Za-z0-9_.:+/=-]{16,512}\Z")
 # What the app shows (the reason `kb-ai-key-missing`), with what to do on the Mac.
 KEY_MISSING = 'chave da IA do kb ausente (OPENROUTER_API_KEY): no Mac, rode "transcriber keys set"'
 KB_MISSING = "o kb não está no PATH do serviço (ou a pasta do vault não existe)"
-# kb's own words for a key it does not have (decisions, generation, transcribe).
+# kb's own words for a key it does not have (decisions, generation, transcribe), and kb-map's
+# for a key or a kb that is not on this Mac.
 CONFIGURATION_ERROR = re.compile(
-    r"_API_KEY is not set|model is required|missing API key", re.IGNORECASE
+    r"_API_KEY is not set|model is required|missing API key|no OpenRouter key"
+    r"|kb is not on PATH|no FIRECRAWL_API_KEY in",
+    re.IGNORECASE,
 )
 
 

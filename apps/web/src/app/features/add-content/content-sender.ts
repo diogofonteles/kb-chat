@@ -27,6 +27,7 @@ import {
   map,
   of,
   retry,
+  takeUntil,
   throwError,
   timer,
   type Observable,
@@ -129,6 +130,8 @@ export class ContentSender {
   private readonly api = inject(DocumentUploadsApi);
   private readonly media = inject(MediaApi);
   private readonly line = new Subject<number>();
+  /** Taken off the list: what was still to go out of it does not. */
+  private readonly removed = new Subject<number>();
   private readonly entries = signal<readonly ContentSend[]>([]);
   private readonly givenUp = signal(0);
   private lastKey = 0;
@@ -159,6 +162,7 @@ export class ContentSender {
       .pipe(
         concatMap((key) =>
           this.run(key).pipe(
+            takeUntil(this.removed.pipe(filter((one) => one === key))),
             catchError((err: unknown) => {
               this.put(key, { kind: 'error', message: messageOf(err) });
               return EMPTY;
@@ -217,6 +221,7 @@ export class ContentSender {
     const kind = this.entryOf(key)?.phase.kind;
     if (kind === 'hashing' || kind === 'sending') return;
     if (kind === 'error') this.givenUp.update((n) => n + 1);
+    this.removed.next(key);
     this.entries.update((all) => all.filter((one) => one.key !== key));
   }
 

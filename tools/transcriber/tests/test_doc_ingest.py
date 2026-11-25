@@ -488,7 +488,8 @@ def test_what_a_job_says_is_said_again_once_the_api_is_back(monkeypatch):
     from transcriber import api as api_module
 
     api = ApiClient("http://localhost:1", lambda: "t" * 40, "mac")
-    waited, answers = [], [ApiError("refused"), ApiError("refused"), (204, b"")]
+    # Down, then a gateway's error (behind Caddy), then back.
+    waited, answers = [], [ApiError("refused"), (502, b""), (204, b"")]
 
     def post(path, body):
         answer = answers.pop(0)
@@ -566,3 +567,27 @@ def test_node_is_nvms_newest_when_it_is_not_on_path(tmp_path, monkeypatch):
         node.touch(mode=0o755)
     monkeypatch.setattr(doc_ingest.shutil, "which", lambda _name: None)
     assert "v22.23.2" in (doc_ingest.node_or_none() or "")
+
+
+def test_a_budget_that_ended_waits_and_a_missing_key_is_configuration(tmp_path, monkeypatch):
+    from transcriber import doc_ingest
+    from transcriber.kb_keys import is_configuration_error
+
+    def answer(code, stderr):
+        def run(command, timeout, **_kwargs):
+            return subprocess.CompletedProcess(command, code, "", stderr)
+
+        monkeypatch.setattr(doc_ingest, "run_whole", run)
+        return doc_ingest.KbMapCli(tmp_path)
+
+    given = {"name": None, "source_path": "u", "budget_usd": 0.1, "upload_id": "u"}
+    with pytest.raises(KbStepFailed):
+        answer(3, "budget reached before describing a.png").convert("t", "/x", **given)
+    for words in (
+        "kb-map: no OpenRouter key: on this Mac run …",
+        "kb-map: kb is not on PATH",
+        "firecrawl: no FIRECRAWL_API_KEY in the environment or the Keychain",
+    ):
+        with pytest.raises(DocIngestFailed) as failed:
+            answer(1, words).convert("t", "/x", **given)
+        assert is_configuration_error(failed.value.detail), words
