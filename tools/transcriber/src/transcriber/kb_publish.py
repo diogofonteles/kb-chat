@@ -15,6 +15,7 @@ with exit 0, which is reported as incomplete.
 """
 
 import fcntl
+import json
 import logging
 import os
 import re
@@ -75,6 +76,14 @@ class KbPort(Protocol):
         """`kb topic new`: the collection's folder in the vault (KBC-114)."""
         ...
 
+    def refusals(self, topic: str) -> KbRun:
+        """What kb refused in the collection and waits for a person, as JSON."""
+        ...
+
+    def accept(self, topic: str, item: str) -> KbRun:
+        """`kb review accept`: what was refused goes into the collection."""
+        ...
+
 
 class KbStepFailed(Exception):
     """A kb step exited with an error: the job fails with kb's output (AC-4) and what kb
@@ -105,6 +114,21 @@ UNDECIDED_COUNT = re.compile(r"^undecided:\s*[1-9]", re.MULTILINE)
 def spend_of(output: str) -> float:
     """What one kb step spent, from its receipt lines."""
     return sum(float(found) for found in SPEND.findall(output))
+
+
+def review_item_of(output: str, document: str) -> str | None:
+    """The refused document's item in `kb review --format json` (kb's notes may follow it)."""
+    start = output.find("{")
+    if start < 0:
+        return None
+    try:
+        listing, _end = json.JSONDecoder().raw_decode(output[start:])
+    except ValueError:
+        return None
+    for item in listing.get("items") or []:
+        if item.get("subject") == document and (item.get("action") or {}).get("quarantined"):
+            return str(item["id"])
+    return None
 
 
 def undecided_in(output: str) -> tuple[set[str], bool]:
@@ -154,6 +178,14 @@ class KbCli:
     def new_topic(self, slug: str, title: str, domain: str) -> KbRun:
         """Scaffolds the folder (kb 0.0.12: local, spends nothing; refuses an existing one)."""
         return self._run(self.topic_command(slug, title, domain))
+
+    def refusals(self, topic: str) -> KbRun:
+        return self._run([self.binary, "review", topic, "--queue", "gate", "--format", "json"])
+
+    def accept(self, topic: str, item: str) -> KbRun:
+        """Local (kb 0.0.12): restoring a document asks no model."""
+        command = [self.binary, "review", "accept", item, "--topic", topic, "--budget", "0"]
+        return self._run(command)
 
     def version(self) -> str | None:
         """`kb version`'s first line ("0.0.12 (commit=…)"), for the status; None if it fails."""
@@ -346,6 +378,16 @@ class KbPublisher:
             folder = target.parent
             if folder.is_dir() and not any(folder.iterdir()):
                 folder.rmdir()
+
+    def accept(self, topic: str, document: str) -> None:
+        """The document kb refused, back in the collection, by its item in kb's review queue."""
+        listed = self.kb.refusals(topic)
+        item = review_item_of(listed.output, document) if listed.ok else None
+        if item is None:
+            raise KbStepFailed("review", listed.output or f"no item for {document}")
+        done = self.kb.accept(topic, item)
+        if not done.ok:
+            raise KbStepFailed("review accept", done.output)
 
     def run_kb(self, topic: str, budget_usd: float) -> tuple[float, set[str], bool]:
         """The steps in order, classify and link within what is left of the budget.

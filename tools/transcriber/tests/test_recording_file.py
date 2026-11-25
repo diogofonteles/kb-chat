@@ -87,6 +87,39 @@ class Site(BaseHTTPRequestHandler):
                 self.wfile.flush()
                 time.sleep(0.05)
             return
+        if self.path.endswith("cabecalho.mp3"):
+            for one in b"HTTP/1.1 200 OK\r\nX-Lento: " + b"a" * 60:
+                try:
+                    self.wfile.write(bytes([one]))
+                    self.wfile.flush()
+                except OSError:
+                    return
+                time.sleep(0.05)
+            return
+        if self.path.endswith("pedaco.mp3"):
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/mpeg")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+            for _ in range(60):
+                try:
+                    self.wfile.write(b"0")
+                    self.wfile.flush()
+                except OSError:
+                    return
+                time.sleep(0.05)
+            return
+        if self.path.endswith("vazio.mp3"):
+            self.send_response(200)
+            self.send_header("Content-Type", "audio/mpeg")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if self.path == "/acento":
+            self.send_response_only(302)
+            self.flush_headers()
+            self.wfile.write("Location: /coração.mp3\r\n\r\n".encode())
+            return
         kind = "text/html" if self.path.endswith("pagina.mp3") else "audio/mpeg"
         self.send_response(200)
         self.send_header("Content-Type", kind)
@@ -165,3 +198,37 @@ def test_an_address_as_typed_works_and_a_broken_one_is_refused(site, tmp_path):
     # A name with what no file system takes.
     strange = fetch_file("http://podcast.example/a%00%2Fb.mp3", tmp_path, resolving)
     assert strange.parent == tmp_path
+
+
+@pytest.mark.parametrize("path", ["cabecalho.mp3", "pedaco.mp3"])
+def test_headers_or_part_sizes_that_drip_meet_the_deadline_too(site, tmp_path, monkeypatch, path):
+    monkeypatch.setattr(recording_file, "DEADLINE_S", 0.3)
+    started = time.monotonic()
+    with pytest.raises(NotARecording, match="too long"):
+        fetch_file(f"http://podcast.example/{path}", tmp_path, names(podcast=PUBLIC))
+    assert time.monotonic() - started < 1.5
+
+
+def test_an_empty_file_is_no_recording(site, tmp_path):
+    with pytest.raises(NotARecording, match="empty"):
+        fetch_file("http://podcast.example/vazio.mp3", tmp_path, names(podcast=PUBLIC))
+
+
+def test_a_redirect_with_accents_goes_where_it_says(site, tmp_path):
+    found = fetch_file("http://podcast.example/acento", tmp_path, names(podcast=PUBLIC))
+    assert found.name == "coração.mp3"
+
+
+def test_the_file_takes_the_title_that_is_known(site, tmp_path):
+    found = fetch_file(
+        "http://podcast.example/e.mp3", tmp_path, names(podcast=PUBLIC), title="Parte 1/2: começo"
+    )
+    assert found.name == "Parte 12: começo.mp3"
+
+
+@pytest.mark.parametrize(
+    "address", ["fec0::1", "64:ff9b::7f00:1", "64:ff9b::c0a8:1", "::ffff:10.0.0.1"]
+)
+def test_a_private_address_inside_another_is_refused(address):
+    with pytest.raises(NotARecording, match="not a public address"):
+        public_address("x.example", lambda _host: [address])

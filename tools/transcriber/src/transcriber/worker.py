@@ -423,6 +423,8 @@ class Worker:
             return
         log.error("job %s: the document did not enter: %s", job["id"], err.detail)
         outcome = {"state": "failed", "failure": err.failure, "detail": err.detail}
+        if err.refused is not None:
+            outcome["refused"] = err.refused
         self.api.doc_result(job, outcome, min(err.spent, float(job["budgetUsd"])))
 
     def _ingested(self, job: dict, progress: dict, outcome: dict, spent: float) -> None:
@@ -448,6 +450,8 @@ class Worker:
                 log.warning("job %s: its file is not ours (404): dropped", job["id"])
                 return None
             converted = self.docs.convert(job, str(path), source["name"])
+        elif source["kind"] == "accept":
+            converted = self.docs.accept(job)
         else:
             converted = self.docs.convert(job, source["url"], None)
         progress["percent"] = 40

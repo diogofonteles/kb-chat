@@ -1,7 +1,10 @@
 """Documents and links sent from the app (KBC-149): a fake kb-map, kb and yt-dlp."""
 
+import shutil
 import subprocess
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +12,7 @@ import pytest
 
 from transcriber.api import ApiClient, ApiError
 from transcriber.doc_ingest import (
+    EXTRACTORS,
     LIST_MAX,
     DocIngester,
     DocIngestFailed,
@@ -19,7 +23,7 @@ from transcriber.doc_ingest import (
     spent_in,
     title_of,
 )
-from transcriber.kb_publish import KbPublisher, KbRun, KbStepFailed
+from transcriber.kb_publish import STEPS, KbPublisher, KbRun, KbStepFailed
 from transcriber.worker import Worker
 
 from .conftest import MEDIA_ID, TOKEN, FakeModel
@@ -475,7 +479,7 @@ def test_the_title_comes_from_the_frontmatter_and_failures_map_to_codes(vault):
     doc.write_text("---\ntype: source\ntitle: 'Título: Um'\n---\n", encoding="utf-8")
     assert title_of(vault, "hermetismo", "raw/a.md") == "Título: Um"
     assert title_of(vault, "hermetismo", "raw/nao.md") == "nao"
-    assert isinstance(failure_of({"state": "failed"}), DocIngestFailed)
+    assert isinstance(failure_of({"state": "failed"}, Path("/none"), "x"), DocIngestFailed)
 
 
 def test_kb_map_runs_with_its_converters_and_no_key_in_its_arguments(tmp_path):
@@ -549,7 +553,7 @@ def test_a_site_that_refuses_for_a_moment_is_asked_again(tmp_path, monkeypatch):
     found = YtDlp("yt-dlp", "/opt/node").download("https://youtu.be/x", tmp_path)
     assert found.name == "Aula [x].m4a"
     assert waited == [10]
-    assert runs[0][:4] == ["yt-dlp", "--ignore-config", "--use-extractors", "default,-generic"]
+    assert runs[0][:4] == ["yt-dlp", "--ignore-config", "--use-extractors", EXTRACTORS]
     assert runs[0][4:6] == ["--js-runtimes", "node:/opt/node"]
 
 
@@ -627,3 +631,130 @@ def test_a_dead_link_without_a_firecrawl_key_is_only_a_dead_link(fake_api, vault
     assert result["outcome"]["failure"] == "conversion-failed"
     assert fake_api.bodies("fail") == []
     assert mac.kinds == kinds
+
+
+REFUSED = "raw/_quarantine/articles/rasa.md"
+
+
+def refused_page(vault: Path) -> Path:
+    page = vault / "hermetismo" / REFUSED
+    page.parent.mkdir(parents=True)
+    page.write_text(
+        '---\ntitle: "Rasa"\ntriage: quarantined\ntriage_reason: thin\n---\n# Rasa\n\nEntrar.\n',
+        encoding="utf-8",
+    )
+    return page
+
+
+def test_what_kb_refused_comes_with_why_and_how_it_begins(fake_api, vault):
+    refused_page(vault)
+    fake_api.jobs[:] = [dict(URL_JOB)]
+    outcome = {"state": "refused", "document": REFUSED, "detail": "kb triage: quarantined"}
+    worker(fake_api, vault, FakeKbMap(vault, outcome)).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["failure"] == "not-accepted"
+    assert result["outcome"]["refused"] == {
+        "document": REFUSED,
+        "reason": "thin",
+        "excerpt": "# Rasa\n\nEntrar.",
+    }
+
+
+def accept_job(document: str) -> dict:
+    return {**FILE_JOB, "source": {"kind": "accept", "document": document}}
+
+
+def test_what_a_person_accepts_enters_with_the_usual_steps(fake_api, vault):
+    page = refused_page(vault)
+    fake_api.jobs[:] = [accept_job(REFUSED)]
+    kb = FakeKb(vault)
+    worker(fake_api, vault, kb=kb).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"] == {
+        "state": "ready",
+        "document": {"id": "raw/articles/rasa.md", "title": "Rasa"},
+        "review": False,
+    }
+    assert [step for step, *_ in kb.calls] == ["accept", *STEPS]
+    assert not page.exists()
+
+
+def test_accepted_before_a_crash_only_the_steps_that_follow_run(fake_api, vault):
+    page = refused_page(vault)
+    inside = vault / "hermetismo" / "raw" / "articles" / "rasa.md"
+    inside.parent.mkdir(parents=True, exist_ok=True)
+    page.rename(inside)
+    fake_api.jobs[:] = [accept_job(REFUSED)]
+    kb = FakeKb(vault)
+    worker(fake_api, vault, kb=kb).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "ready"
+    assert [step for step, *_ in kb.calls] == list(STEPS)
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        "raw/articles/rasa.md",
+        "raw/_quarantine/../../outro/raw/a.md",
+        "raw/_quarantine/.git/a.md",
+        "raw/_quarantine/articles/sumiu.md",
+    ],
+)
+def test_only_what_is_in_the_quarantine_can_be_accepted(fake_api, vault, document):
+    refused_page(vault)
+    fake_api.jobs[:] = [accept_job(document)]
+    kb = FakeKb(vault)
+    worker(fake_api, vault, kb=kb).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "failed"
+    assert kb.calls == []
+
+
+def test_a_podcasts_file_is_fetched_by_this_mac_whatever_the_server(tmp_path, monkeypatch):
+    commands = []
+
+    def run(command, _timeout):
+        commands.append(command)
+        printed = "Episódio 1: o começo\nhttps://cdn.example/e1.mp3\n"
+        return subprocess.CompletedProcess(command, 0, printed, "")
+
+    fetched = []
+    monkeypatch.setattr(YtDlp, "_run", staticmethod(run))
+    monkeypatch.setattr(
+        "transcriber.doc_ingest.fetch_file",
+        lambda url, folder, title=None: fetched.append((url, title)) or folder / "x.mp3",
+    )
+    YtDlp().download("https://podcasts.apple.com/br/podcast/x/id1?i=2", tmp_path)
+    assert fetched == [("https://cdn.example/e1.mp3", "Episódio 1: o começo")]
+    assert "--simulate" in commands[0]
+
+
+@pytest.mark.skipif(shutil.which("yt-dlp") is None, reason="yt-dlp is not on this machine")
+def test_the_real_yt_dlp_opens_nothing_through_a_forwarding_page(tmp_path, monkeypatch):
+    """QA BLQ-1: a known site's page that forwards to an extractor that takes any host."""
+    touched = []
+
+    class Inside(BaseHTTPRequestHandler):
+        def do_GET(self):
+            touched.append(self.path)
+            self.send_error(404)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Inside)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    inside = f"http%3A%2F%2F127.0.0.1%3A{server.server_port}"
+    key = "0123456789abcdef0123456789abcdef0"
+    links = [
+        f"https://consent.youtube.com/m?continue={inside}%2FMediasite%2FPlay%2F{key}",
+        f"https://consent.youtube.com/m?continue={inside}%2Fa.mp4",
+        f"https://l.facebook.com/l.php?u={inside}%2Fa.mp4",
+        f"https://www.facebook.com/plugins/video.php?href={inside}%2Fa.mp4",
+    ]
+    for url in links:
+        with pytest.raises(DocIngestFailed):
+            YtDlp().download(url, tmp_path)
+    server.shutdown()
+    assert touched == []

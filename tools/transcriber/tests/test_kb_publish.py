@@ -1,6 +1,7 @@
 """Track documents through kb (KBC-099): a fake kb, never the real binary nor a model."""
 
 import fcntl
+import json
 from pathlib import Path
 
 import numpy as np
@@ -86,6 +87,32 @@ class FakeKb:
                 file.write_text(text.replace("---\n", f"---\n{facets}", 1), encoding="utf-8")
         spend = 0.0 if step == "index" else self.spend
         return KbRun(ok=True, output=self.outputs.get(step, f"{step} ok"), spend_usd=spend)
+
+    def refusals(self, topic: str) -> KbRun:
+        """kb's queue, with the notes it prints after the JSON."""
+        refused = sorted((self.vault / topic / "raw" / "_quarantine").rglob("*.md"))
+        items = [
+            {
+                "id": f"rv-{one.stem}",
+                "queue": "gate",
+                "subject": "raw/"
+                + one.relative_to(self.vault / topic / "raw" / "_quarantine").as_posix(),
+                "action": {"quarantined": True, "reason": "thin"},
+            }
+            for one in refused
+        ]
+        listing = json.dumps({"counts": {}, "items": items}, indent=2)
+        return KbRun(ok=True, output=f"{listing}\nsources per raw/ folder: raw/articles 1")
+
+    def accept(self, topic: str, item: str) -> KbRun:
+        self.calls.append(("accept", item, 0.0))
+        for one in (self.vault / topic / "raw" / "_quarantine").rglob(f"{item[3:]}.md"):
+            inside = one.relative_to(self.vault / topic / "raw" / "_quarantine")
+            target = self.vault / topic / "raw" / inside
+            target.parent.mkdir(parents=True, exist_ok=True)
+            one.rename(target)
+            return KbRun(ok=True, output="restored")
+        return KbRun(ok=False, output=f"unknown review item {item}")
 
 
 @pytest.fixture

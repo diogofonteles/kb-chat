@@ -24,6 +24,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import urlsplit
 
 from .kb_publish import KbPublisher, KbStepFailed
 from .recording_file import NotARecording, TooLarge, fetch_file, is_known_site
@@ -37,6 +38,15 @@ LIST_TIMEOUT_S = 5 * 60
 # The most of a channel or playlist the app offers (RECORDING_LIST_MAX in the contracts).
 LIST_MAX = 5_000
 OUTPUT_CHARS = 2_000
+# The only extractors yt-dlp may use, each of one site: any other (the generic one, or one that
+# takes any host, reached through a site's own forwarding page) follows an address anywhere,
+# this Mac's network included.
+EXTRACTORS = (
+    r"youtube.*,-youtube:consent,vimeo.*,instagram.*,soundcloud.*,apple:podcasts"
+    r",archive\.org,facebook,facebook:reel"
+)
+# Whose episodes live on their publishers' own servers.
+PODCASTS = "podcasts.apple.com"
 # How kb-map ends when its budget does.
 BUDGET_EXIT = 3
 # The app's limit for a document's title (uploadedDocumentRefSchema).
@@ -44,15 +54,29 @@ TITLE_CHARS = 500
 # And for an entry of a list (recordingEntrySchema).
 ENTRY_TITLE_CHARS = 300
 URL_CHARS = 2_000
+# What kb refused, as the app takes it (refusedDocumentSchema).
+REASON_CHARS = 60
+EXCERPT_CHARS = 3_000
+# Where kb puts it: a document of the collection, out of it until a person says so.
+QUARANTINE = "raw/_quarantine/"
+QUARANTINED = re.compile(r"^raw/_quarantine/(?:[^/.][^/]*/)*[^/.][^/]*\.md\Z")
 log = logging.getLogger("transcriber")
 
 
 class DocIngestFailed(Exception):
     """The document cannot enter: `failure` is the API's code, `detail` the tool's words."""
 
-    def __init__(self, failure: str, detail: str, spent: float = 0.0) -> None:
+    def __init__(
+        self,
+        failure: str,
+        detail: str,
+        spent: float = 0.0,
+        refused: dict | None = None,
+    ) -> None:
         super().__init__(detail)
         self.failure = failure
+        # What kb put apart, for a person to look at: where it is, why and how it begins.
+        self.refused = refused
         self.detail = detail[-OUTPUT_CHARS:]
         # What the conversion spent before it failed: booked all the same (KBC-009 R3).
         self.spent = spent
@@ -96,15 +120,41 @@ class RecordingPort(Protocol):
     def entries(self, url: str) -> list[dict]: ...
 
 
-def failure_of(outcome: dict) -> DocIngestFailed:
+def failure_of(outcome: dict, vault: Path, topic: str) -> DocIngestFailed:
     """kb-map's failed or refused outcome as the API's reason (AC-4)."""
     detail = str(outcome.get("detail") or outcome.get("state") or "conversion failed")
     spent = usd_of(outcome)
     if outcome.get("state") == "refused":
-        return DocIngestFailed("not-accepted", detail, spent)
+        return DocIngestFailed("not-accepted", detail, spent, refused_in(vault, topic, outcome))
     if "empty or unreadable" in detail:
         return DocIngestFailed("empty", detail, spent)
     return DocIngestFailed("conversion-failed", detail, spent)
+
+
+def refused_in(vault: Path, topic: str, outcome: dict) -> dict | None:
+    """What kb put in its quarantine, read for the person who decides (KBC-009)."""
+    document = str(outcome.get("document") or "")
+    if not QUARANTINED.match(document):
+        return None
+    try:
+        text = (vault / topic / document).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    head, body = _parts_of(text)
+    reason = re.search(r"^triage_reason:\s*(.+)$", head, re.MULTILINE)
+    return {
+        "document": document,
+        "reason": cut(reason[1].strip("\"' ") if reason else "", REASON_CHARS),
+        "excerpt": cut(body.strip(), EXCERPT_CHARS),
+    }
+
+
+def _parts_of(text: str) -> tuple[str, str]:
+    """The frontmatter and what comes after it."""
+    if not text.startswith("---\n"):
+        return "", text
+    head, _line, body = text[4:].partition("\n---\n")
+    return head, body
 
 
 def usd_of(outcome: dict) -> float:
@@ -267,20 +317,15 @@ class YtDlp:
 
     def _command(self, *args: str) -> list[str]:
         runtime = ["--js-runtimes", f"node:{self.node}"] if self.node else []
-        # Each site's own extractor: the generic one follows an address anywhere, this Mac's
-        # network included.
-        own = ["--use-extractors", "default,-generic"]
+        own = ["--use-extractors", EXTRACTORS]
         return [self.binary, "--ignore-config", *own, *runtime, *args]
 
     def download(self, url: str, folder: Path) -> Path:
         # Any other site is fetched by this Mac itself, never by yt-dlp (recording_file.py).
         if not is_known_site(url):
-            try:
-                return fetch_file(url, folder)
-            except TooLarge as err:
-                raise DocIngestFailed("too-large", str(err)) from err
-            except NotARecording as err:
-                raise DocIngestFailed("conversion-failed", str(err)) from err
+            return self._file(url, folder)
+        if (urlsplit(url).hostname or "").endswith(PODCASTS):
+            return self._episode(url, folder)
         # Named after the recording: the app takes its title from the file's name.
         template = str(folder / "%(title).120B [%(id)s].%(ext)s")
         command = self._command("--no-playlist", "--playlist-items", "1")
@@ -299,6 +344,26 @@ class YtDlp:
             log.warning("yt-dlp was refused, again in %d s", wait)
             time.sleep(wait)
         raise AssertionError("unreachable")
+
+    def _episode(self, url: str, folder: Path) -> Path:
+        """The publisher's file, whatever the server: fetched by this Mac, as any other file."""
+        command = self._command("--no-playlist", "--playlist-items", "1", "--simulate")
+        command += ["--print", "%(title)s", "--print", "%(url)s", "--", url]
+        done = self._run(command, LIST_TIMEOUT_S)
+        lines = [line for line in done.stdout.splitlines() if line.strip()]
+        if done.returncode != 0 or len(lines) < 2:
+            output = (done.stdout + done.stderr).strip()
+            raise DocIngestFailed(refusal_of(output), f"yt-dlp: {output}")
+        return self._file(lines[1], folder, lines[0])
+
+    @staticmethod
+    def _file(url: str, folder: Path, title: str | None = None) -> Path:
+        try:
+            return fetch_file(url, folder, title=title)
+        except TooLarge as err:
+            raise DocIngestFailed("too-large", str(err)) from err
+        except NotARecording as err:
+            raise DocIngestFailed("conversion-failed", str(err)) from err
 
     def entries(self, url: str) -> list[dict]:
         if not is_known_site(url):
@@ -394,7 +459,7 @@ class DocIngester:
         )
         state = outcome.get("state")
         if state not in ("converted", "review", "duplicate") or not outcome.get("document"):
-            raise failure_of(outcome)
+            raise failure_of(outcome, self.publisher.vault, topic)
         document = str(outcome["document"])
         title = title_of(self.publisher.vault, topic, document)
         # What this same upload wrote before a crash is not "already there": its steps go on.
@@ -406,6 +471,23 @@ class DocIngester:
             usd_of(outcome),
             review=state == "review",
         )
+
+    def accept(self, job: dict) -> Converted:
+        """A person said it enters all the same: kb takes it out of its quarantine. Done before
+        a crash, the steps that follow go on."""
+        topic = job["topic"]
+        refused = str(job["source"]["document"])
+        if not QUARANTINED.match(refused):
+            raise DocIngestFailed("not-accepted", f"not a refused document: {refused}")
+        document = refused.replace(QUARANTINE, "raw/", 1)
+        folder = self.publisher.vault / topic
+        if not (folder / document).is_file():
+            if not (folder / refused).is_file():
+                raise DocIngestFailed("conversion-failed", "it is not in kb's quarantine any more")
+            self.publisher.accept(topic, document)
+        if not (folder / document).is_file():
+            raise KbStepFailed("review accept", f"{document} was not restored")
+        return Converted("converted", document, title_of(self.publisher.vault, topic, document))
 
     def finish(self, job: dict, converted: Converted, say) -> float:
         """kb's steps and the map, for a new document; what the whole job spent."""
