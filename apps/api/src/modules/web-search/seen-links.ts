@@ -31,7 +31,9 @@ export class SeenLinks {
   constructor(private readonly store: DocumentStorePort) {}
 
   async load(): Promise<void> {
-    const parsed = seenSchema.safeParse((await this.store.read()) ?? {});
+    // A file cut short is no reason for the API not to start: it only remembers less.
+    const raw = await this.store.read().catch(() => null);
+    const parsed = seenSchema.safeParse(raw ?? {});
     if (!parsed.success) return;
     for (const [principal, topics] of Object.entries(parsed.data.seen))
       this.seen.set(

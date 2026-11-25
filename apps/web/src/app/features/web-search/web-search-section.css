@@ -350,3 +350,22 @@ fieldset {
 .more {
   min-height: 2.75rem;
 }
+
+/* How far the search got: in sight while its results come in under it. */
+.progress {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.progress.stuck {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: var(--space-2) 0;
+  background: var(--color-bg);
+}
+
+.progress ui-progress {
+  width: 100%;
+}

@@ -12,7 +12,7 @@ import {
 } from '@kb-chat/contracts';
 
 /** Why a name was not added to the reference authors. */
-export type AuthorProblem = 'short' | 'long' | 'repeated' | 'full';
+export type AuthorProblem = 'short' | 'long' | 'repeated';
 
 /**
  * What the person last asked the web search for (KBC-185): kept while the app is open, so
@@ -93,12 +93,11 @@ export class WebSearchForm {
     name: string,
     added: readonly string[],
   ): AuthorProblem | null {
-    const { nameMin, nameMax, max } = WEB_SEARCH_AUTHORS;
+    const { nameMin, nameMax } = WEB_SEARCH_AUTHORS;
     const authors = [...this.authors(), ...added];
     if (withoutQuotes(name).length < nameMin) return 'short';
     if (name.length > nameMax) return 'long';
-    if (authors.some((one) => sameAuthor(one, name))) return 'repeated';
-    return authors.length >= max ? 'full' : null;
+    return authors.some((one) => sameAuthor(one, name)) ? 'repeated' : null;
   }
 
   removeAuthor(name: string): void {

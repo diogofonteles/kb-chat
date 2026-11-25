@@ -1,10 +1,4 @@
-import {
-  DestroyRef,
-  Injectable,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type {
   WebSearchKind,
@@ -13,6 +7,7 @@ import type {
   WebSearchResult,
 } from '@kb-chat/contracts';
 import { toUiErrorCode, type UiErrorCode } from '@core/api/api-error.js';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { WebSearchApi } from '@core/web-search/web-search-api.js';
 import {
   EMPTY,
@@ -21,6 +16,8 @@ import {
   defer,
   expand,
   finalize,
+  groupBy,
+  mergeMap,
   switchMap,
   tap,
   type Observable,
@@ -32,7 +29,7 @@ export const SEARCH_STEP = 10;
 /** What is searched for a collection, however many sources are wanted of it. */
 export interface SearchAsked {
   readonly topic: string;
-  readonly request: Omit<WebSearchRequestInput, 'sources'>;
+  readonly request: Omit<WebSearchRequestInput, 'sources' | 'search'>;
 }
 
 /** A result picked to be included: the page sends it as a link (KBC-149). */
@@ -44,6 +41,8 @@ export interface PickedWebResult {
 
 /** One search: what came, and where it is. */
 export interface SearchState {
+  /** What the API goes on with: another press of "Pesquisar" is another search. */
+  readonly id: string;
   readonly asked: SearchAsked;
   /** The results wanted so far: "Buscar mais" raises it. */
   readonly wanted: number;
@@ -62,6 +61,7 @@ export interface SearchState {
 }
 
 const begun = (asked: SearchAsked, wanted: number): SearchState => ({
+  id: crypto.randomUUID(),
   asked,
   wanted,
   searching: true,
@@ -82,30 +82,48 @@ const pickable = (state: SearchState): readonly WebSearchResult[] =>
     (one) => one.already === null && !state.taken.has(one.url),
   );
 
+/** Paid, and not included: a reload would lose it. */
+const wouldBeLost = (state: SearchState): boolean =>
+  state.searching || pickable(state).length > 0;
+
+/** A press: go on (or start) in a collection, or stop there. */
+interface Turn {
+  readonly topic: string;
+  readonly go: boolean;
+}
+
 /**
- * The web search of the moment (KBC-185): as many requests as the sources wanted take, the
- * results coming in as they arrive. Kept while the app is open: a search is paid, so leaving
- * the page, or looking at another tab of it, loses none.
+ * The web searches of the moment (KBC-185), one per collection: as many requests as the
+ * sources wanted take, the results coming in as they arrive. Kept while the app is open: a
+ * search is paid, so leaving the page, another tab of it or another collection loses none,
+ * and a new version of the app does not reload over it.
  */
 @Injectable({ providedIn: 'root' })
 export class WebSearchRun {
   private readonly api = inject(WebSearchApi);
-  private readonly state = signal<SearchState | null>(null);
-  private readonly turns = new Subject<'go' | 'stop'>();
+  private readonly states = signal<ReadonlyMap<string, SearchState>>(new Map());
+  private readonly turns = new Subject<Turn>();
 
   constructor() {
+    inject(BusyWork).holdWhile(
+      computed(() => [...this.states().values()].some(wouldBeLost)),
+    );
     this.turns
       .pipe(
-        switchMap((turn) => (turn === 'go' ? this.pull() : EMPTY)),
-        takeUntilDestroyed(inject(DestroyRef)),
+        groupBy((turn) => turn.topic),
+        mergeMap((turns) =>
+          turns.pipe(
+            switchMap(({ topic, go }) => (go ? this.pull(topic) : EMPTY)),
+          ),
+        ),
+        takeUntilDestroyed(),
       )
       .subscribe();
   }
 
   /** The collection's search, or null: another collection's is not shown in this one. */
   of(topic: string): SearchState | null {
-    const state = this.state();
-    return state?.asked.topic === topic ? state : null;
+    return this.states().get(topic) ?? null;
   }
 
   picksOf(topic: string): readonly PickedWebResult[] {
@@ -116,35 +134,36 @@ export class WebSearchRun {
       .map(({ url, title, kind }) => ({ url, title, kind }));
   }
 
-  readonly searching = computed(() => this.state()?.searching === true);
-
   start(asked: SearchAsked, wanted: number): void {
-    this.state.set(begun(asked, wanted));
-    this.turns.next('go');
+    const { topic } = asked;
+    this.stop(topic);
+    this.states.update((states) =>
+      new Map(states).set(topic, begun(asked, wanted)),
+    );
+    this.turns.next({ topic, go: true });
   }
 
   /** More of the same: what comes is new, what was given before stays. */
-  more(sources: number): void {
-    this.change((state) => ({
+  more(topic: string, sources: number): void {
+    this.change(topic, (state) => ({
       ...state,
       wanted: state.results.length + sources,
-      searching: true,
     }));
-    this.turns.next('go');
+    this.turns.next({ topic, go: true });
   }
 
   /** What failed, or was left half-way, asked again: what is there stays. */
-  retry(): void {
-    this.change((state) => ({ ...state, searching: true }));
-    this.turns.next('go');
+  retry(topic: string): void {
+    this.turns.next({ topic, go: true });
   }
 
-  stop(): void {
-    this.turns.next('stop');
+  /** The API stops too: what it had found waits there for the next press. */
+  stop(topic: string): void {
+    this.turns.next({ topic, go: false });
   }
 
-  toggle(url: string): void {
-    this.change((state) => {
+  toggle(topic: string, url: string): void {
+    this.change(topic, (state) => {
       const dropped = new Set(state.dropped);
       if (!dropped.delete(url)) dropped.add(url);
       return { ...state, dropped };
@@ -152,8 +171,8 @@ export class WebSearchRun {
   }
 
   /** All of them, or none when all are. */
-  toggleAll(): void {
-    this.change((state) => {
+  toggleAll(topic: string): void {
+    this.change(topic, (state) => {
       const urls = pickable(state).map((one) => one.url);
       const all = urls.every((url) => !state.dropped.has(url));
       return { ...state, dropped: new Set(all ? urls : []) };
@@ -161,55 +180,65 @@ export class WebSearchRun {
   }
 
   /** Included now: they stay listed, and cannot go twice. */
-  take(urls: readonly string[]): void {
-    this.change((state) => ({
+  take(topic: string, urls: readonly string[]): void {
+    this.change(topic, (state) => ({
       ...state,
       taken: new Set([...state.taken, ...urls]),
     }));
   }
 
-  private pull(): Observable<unknown> {
-    this.change((state) => ({ ...state, error: null, partial: false }));
-    return this.step().pipe(
-      expand(() => (this.goesOn() ? this.step() : EMPTY)),
-      catchError((err: unknown) => {
-        this.change((state) => ({ ...state, error: toUiErrorCode(err) }));
-        return EMPTY;
-      }),
-      finalize(() => this.change((state) => ({ ...state, searching: false }))),
-    );
+  private pull(topic: string): Observable<unknown> {
+    return defer(() => {
+      this.change(topic, (state) => ({
+        ...state,
+        searching: true,
+        error: null,
+        partial: false,
+      }));
+      return this.step(topic).pipe(
+        expand(() => (this.goesOn(topic) ? this.step(topic) : EMPTY)),
+        catchError((err: unknown) => {
+          const error = toUiErrorCode(err);
+          this.change(topic, (state) => ({ ...state, error }));
+          return EMPTY;
+        }),
+        finalize(() =>
+          this.change(topic, (state) => ({ ...state, searching: false })),
+        ),
+      );
+    });
   }
 
-  private step(): Observable<WebSearchResponse> {
+  private step(topic: string): Observable<WebSearchResponse> {
     return defer(() => {
-      const state = this.state();
+      const state = this.of(topic);
       if (!state) return EMPTY;
       const missing = state.wanted - state.results.length;
       const sources = Math.max(1, Math.min(SEARCH_STEP, missing));
-      const { topic, request } = state.asked;
-      return this.api.search(topic, { ...request, sources });
-    }).pipe(tap((answer) => this.receive(answer)));
+      return this.api.search(topic, {
+        ...state.asked.request,
+        search: state.id,
+        sources,
+      });
+    }).pipe(tap((answer) => this.receive(topic, answer)));
   }
 
-  private goesOn(): boolean {
-    const state = this.state();
+  private goesOn(topic: string): boolean {
+    const state = this.of(topic);
     return (
-      state !== null &&
-      state.results.length < state.wanted &&
-      !state.exhausted &&
-      !state.partial
+      state !== null && state.results.length < state.wanted && !state.exhausted
     );
   }
 
-  private receive(answer: WebSearchResponse): void {
-    this.change((state) => {
+  private receive(topic: string, answer: WebSearchResponse): void {
+    this.change(topic, (state) => {
       const known = new Set(state.results.map((one) => one.url));
       const fresh = answer.results.filter((one) => !known.has(one.url));
       return {
         ...state,
         results: [...state.results, ...fresh],
         exhausted: answer.exhausted,
-        partial: answer.partial,
+        partial: state.partial || answer.partial,
         skipped: {
           already: state.skipped.already + answer.skipped.already,
           seen: state.skipped.seen + answer.skipped.seen,
@@ -221,7 +250,13 @@ export class WebSearchRun {
     });
   }
 
-  private change(apply: (state: SearchState) => SearchState): void {
-    this.state.update((state) => state && apply(state));
+  private change(
+    topic: string,
+    apply: (state: SearchState) => SearchState,
+  ): void {
+    this.states.update((states) => {
+      const state = states.get(topic);
+      return state ? new Map(states).set(topic, apply(state)) : states;
+    });
   }
 }

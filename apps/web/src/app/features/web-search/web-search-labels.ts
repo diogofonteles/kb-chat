@@ -14,8 +14,6 @@ export const AUTHOR_PROBLEMS: Record<AuthorProblem, () => string> = {
     $localize`:@@webSearch.authorLong:Um nome tem até 80 letras. Separe os autores por vírgula.`,
   repeated: () =>
     $localize`:@@webSearch.authorRepeated:Este autor já está na lista.`,
-  full: () =>
-    $localize`:@@webSearch.authorsFull:Já são 50 autores. Remova um para incluir outro.`,
 };
 
 /** "Cerca de 24 créditos do Firecrawl.": masters, who see the balance. */

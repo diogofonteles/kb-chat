@@ -518,7 +518,10 @@ export class AddContentPage {
     if (this.way() === 'files') this.files.set([]);
     if (this.way() === 'links') this.text.set(this.parsed().refused.join('\n'));
     if (this.way() === 'search')
-      this.searchRun.take(this.picks().map(({ url }) => url));
+      this.searchRun.take(
+        this.topic(),
+        this.picks().map(({ url }) => url),
+      );
   }
 
   protected focusHeading(): void {

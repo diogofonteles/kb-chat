@@ -8,6 +8,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import type { WebSearchResponse, WebSearchResult } from '@kb-chat/contracts';
+import { BusyWork } from '@core/app-version/busy-work.js';
 import { ChatStore } from '@features/chat/chat-store.js';
 import { fireEvent, render, screen, within } from '@testing-library/angular';
 import { sessionAs } from '../../testing/media-fixtures.js';
@@ -179,6 +180,7 @@ describe('WebSearchSection: the form (KBC-185)', () => {
       kinds: ['text', 'video'],
       authors: ['Manly Hall'],
       again: false,
+      search: expect.any(String),
     });
   });
 
@@ -368,7 +370,7 @@ describe('WebSearchSection: what it answers', () => {
     await found(opened);
     fireEvent.click(box('Aula em vídeo'));
     await opened.settle();
-    opened.run.take(['https://www.exemplo.org/1']);
+    opened.run.take('hermetismo', ['https://www.exemplo.org/1']);
     await opened.settle();
     const went = box('O Caibalion comentado');
     expect([went.checked, went.disabled]).toEqual([false, true]);
@@ -441,8 +443,89 @@ describe('WebSearchSection: what it answers', () => {
     await opened.settle();
     expect(second.cancelled).toBe(true);
     expect(status()).toContain('10 resultados.');
-    expect(chip('Buscar mais 30')).toBeTruthy();
     expect(document.activeElement).toBe(searchButton());
+    // Going on is the same search: what the API had found waits there.
+    fireEvent.click(chip('Buscar mais 30'));
+    await opened.settle();
+    const third = opened.http.expectOne(SEARCH);
+    expect(third.request.body.search).toBe(first.request.body.search);
+    third.flush(aResponse({ results: some(10, 2) }));
+    await opened.settle();
+    // "Pesquisar" again is another one.
+    fireEvent.click(searchButton());
+    await opened.settle();
+    const fourth = opened.http.expectOne(SEARCH);
+    expect(fourth.request.body.search).not.toBe(first.request.body.search);
+    fourth.flush(aResponse());
+    await opened.settle();
+  });
+
+  it('keeps the focus when "Parar" or "Buscar mais" go away', async () => {
+    const opened = await open();
+    type(sources(), '20');
+    const first = await searched(opened);
+    chip('Parar').focus();
+    first.flush(aResponse({ exhausted: false, results: some(0, 20) }));
+    await opened.settle();
+    expect(document.activeElement?.textContent).toContain('20 resultados');
+    const more = chip('Buscar mais 20');
+    more.focus();
+    fireEvent.click(more);
+    await opened.settle();
+    expect(document.activeElement?.textContent).toContain('Procurando…');
+    opened.http.expectOne(SEARCH).flush(aResponse());
+    await opened.settle();
+  });
+
+  it('goes on past a search that did not answer, and says it at the end', async () => {
+    const opened = await open();
+    type(sources(), '12');
+    const first = await searched(opened);
+    first.flush(
+      aResponse({ exhausted: false, partial: true, results: some(0, 10) }),
+    );
+    await opened.settle();
+    opened.http
+      .expectOne(SEARCH)
+      .flush(aResponse({ exhausted: false, results: some(10, 2) }));
+    await opened.settle();
+    expect(status()).toContain('12 resultados.');
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Algumas consultas não responderam',
+    );
+  });
+
+  it('a search in another collection meanwhile is another search: neither is lost', async () => {
+    const opened = await open();
+    type(sources(), '10');
+    const here = await searched(opened);
+    await opened.rerender({ inputs: { topic: 'alquimia' } });
+    await opened.settle();
+    fireEvent.click(searchButton());
+    await opened.settle();
+    const there = opened.http.expectOne('/api/v1/topics/alquimia/web-search');
+    expect(here.cancelled).toBe(false);
+    here.flush(aResponse({ results: some(0, 3) }));
+    await opened.settle();
+    // Still searching here, whatever ended there: a second press pays nothing.
+    expect(status()).toContain('Procurando… 0 de 10.');
+    fireEvent.click(searchButton());
+    await opened.settle();
+    opened.http.expectNone('/api/v1/topics/alquimia/web-search');
+    there.flush(aResponse({ results: some(5, 2) }));
+    await opened.settle();
+    expect(status()).toContain('2 resultados.');
+    expect(opened.run.of('hermetismo')?.results).toHaveLength(3);
+  });
+
+  it('a new version of the app does not reload over what was found and not included', async () => {
+    const opened = await open();
+    const busy = TestBed.inject(BusyWork);
+    await found(opened);
+    expect(busy.busy()).toBe(true);
+    const urls = pickedNow(opened);
+    opened.run.take('hermetismo', urls);
+    expect(busy.busy()).toBe(false);
   });
 
   it('says what was left out, and brings it when asked', async () => {
@@ -530,7 +613,7 @@ describe('WebSearchSection: what it answers', () => {
 
   it('says some searches did not answer, and asks again keeping what is there', async () => {
     const opened = await open();
-    await found(opened, aResponse({ partial: true, exhausted: false }));
+    await found(opened, aResponse({ partial: true }));
     expect(screen.getByRole('alert').textContent).toContain(
       'Algumas consultas não responderam',
     );

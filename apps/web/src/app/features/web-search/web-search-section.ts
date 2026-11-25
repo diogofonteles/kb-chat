@@ -6,9 +6,11 @@ import {
   ElementRef,
   LOCALE_ID,
   computed,
+  effect,
   inject,
   input,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
@@ -107,6 +109,10 @@ export class WebSearchSection {
     viewChild<ElementRef<HTMLInputElement>>('sourcesInput');
   private readonly authorInput =
     viewChild<ElementRef<HTMLInputElement>>('authorInput');
+  private readonly stopButton =
+    viewChild<ElementRef<HTMLButtonElement>>('stopButton');
+  private readonly progressText =
+    viewChild<ElementRef<HTMLElement>>('progressText');
   private readonly searchButton =
     viewChild<ElementRef<HTMLButtonElement>>('searchButton');
 
@@ -281,6 +287,16 @@ export class WebSearchSection {
     }),
   );
 
+  constructor() {
+    // The search ended by itself: "Parar" goes away, and its focus with it (WCAG 2.4.3).
+    effect(() => {
+      if (this.searching()) return;
+      const stop = untracked(this.stopButton)?.nativeElement;
+      if (stop && stop === stop.ownerDocument.activeElement)
+        untracked(this.progressText)?.nativeElement.focus();
+    });
+  }
+
   protected editAuthor(event: Event): void {
     this.typedAuthor.set((event.target as HTMLInputElement).value);
     this.refusedAuthor.set(null);
@@ -357,24 +373,29 @@ export class WebSearchSection {
   /** The same search again. The button pressed goes away: the focus stays in the form. */
   protected retry(): void {
     this.searchButton()?.nativeElement.focus();
-    this.run.retry();
+    this.run.retry(this.topic());
   }
 
   protected more(): void {
-    this.run.more(this.form.sources() ?? WEB_SEARCH_SOURCES.default);
+    // The button goes away while it searches: the focus goes to how far it got.
+    this.progressText()?.nativeElement.focus();
+    this.run.more(
+      this.topic(),
+      this.form.sources() ?? WEB_SEARCH_SOURCES.default,
+    );
   }
 
   protected stop(): void {
     this.searchButton()?.nativeElement.focus();
-    this.run.stop();
+    this.run.stop(this.topic());
   }
 
   protected toggle(url: string): void {
-    this.run.toggle(url);
+    this.run.toggle(this.topic(), url);
   }
 
   protected toggleAll(): void {
-    this.run.toggleAll();
+    this.run.toggleAll(this.topic());
   }
 
   /** The document the collection already has, in the conversation's reading panel. */

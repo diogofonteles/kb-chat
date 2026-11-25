@@ -217,20 +217,33 @@
         <ui-icon name="search" [size]="18" />
         <span i18n="@@webSearch.go">Pesquisar</span>
       </button>
-      @if (searching()) {
-        <button uiButton="outline" type="button" (click)="stop()">
-          <span i18n="@@webSearch.stop">Parar</span>
-        </button>
-      }
       <p class="calls" id="web-search-calls">{{ estimate() }}</p>
     </div>
   </form>
 
-  <p class="status" role="status" [class.empty]="!status()">{{ status() }}</p>
-
-  @if (searching()) {
-    <ui-progress [value]="share()" />
-  }
+  <div class="progress" [class.stuck]="searching()">
+    <p
+      #progressText
+      class="status"
+      role="status"
+      tabindex="-1"
+      [class.empty]="!status()"
+    >
+      {{ status() }}
+    </p>
+    @if (searching()) {
+      <ui-progress [value]="share()" />
+      <button
+        #stopButton
+        uiButton="outline"
+        type="button"
+        class="more"
+        (click)="stop()"
+      >
+        <span i18n="@@webSearch.stop">Parar</span>
+      </button>
+    }
+  </div>
   @if (loading()) {
     <div class="rows" aria-hidden="true">
       @for (one of skeletons; track one) {
