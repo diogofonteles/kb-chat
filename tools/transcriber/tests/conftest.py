@@ -120,7 +120,7 @@ class FakeApi:
         length = int(handler.headers.get("content-length") or 0)
         raw = handler.rfile.read(length) if length else b""
         is_json = (handler.headers.get("content-type") or "").startswith("application/json")
-        # A file sent as bytes (KBC-149: a YouTube link's audio) is recorded by its size.
+        # A file sent as bytes (KBC-149: a recording link's audio) is recorded by its size.
         body = (json.loads(raw) if is_json else {"bytes": len(raw)}) if raw else None
         self.calls.append((method, url.path, body, dict(handler.headers)))
         if handler.headers.get("authorization") != f"Bearer {self.token}":
@@ -145,7 +145,7 @@ class FakeApi:
             return self._send(handler, 200, b"fake-flac", "audio/flac")
         if action == "document":
             return self._send(handler, 200, self.document, "application/octet-stream")
-        if action == "youtube-audio":
+        if action == "recording-audio":
             return self._send(handler, 200, json.dumps({"mediaId": MEDIA_ID}).encode())
         return self._send(handler, 204, b"")
 

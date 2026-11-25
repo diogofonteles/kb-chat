@@ -44,6 +44,14 @@ export const MEDIA_UPLOAD_EXTENSIONS = [
   'ogg',
   'opus',
 ] as const;
+/** Video files whose sound alone is kept (KBC-186): they enter as a recording. */
+export const MEDIA_VIDEO_EXTENSIONS = [
+  'mp4',
+  'mov',
+  'm4v',
+  'webm',
+  'mkv',
+] as const;
 export const MEDIA_UPLOAD_MIME_TYPES = [
   'audio/mpeg',
   'audio/mp3',
@@ -57,6 +65,11 @@ export const MEDIA_UPLOAD_MIME_TYPES = [
   'audio/x-flac',
   'audio/ogg',
   'audio/opus',
+  'video/mp4',
+  'video/quicktime',
+  'video/x-m4v',
+  'video/webm',
+  'video/x-matroska',
   'application/octet-stream',
 ] as const;
 
@@ -518,12 +531,16 @@ export const myMediaBookmarkListSchema = z.object({
   items: z.array(myMediaBookmarkSchema),
 });
 
-/** True when a file name ends with an accepted audio extension. */
-export function hasAcceptedAudioExtension(fileName: string): boolean {
+const ACCEPTED_MEDIA: readonly string[] = [
+  ...MEDIA_UPLOAD_EXTENSIONS,
+  ...MEDIA_VIDEO_EXTENSIONS,
+];
+
+/** True when a file name ends with an accepted audio or video extension. */
+export function hasAcceptedMediaExtension(fileName: string): boolean {
   const dot = fileName.lastIndexOf('.');
   if (dot <= 0) return false;
-  const extension = fileName.slice(dot + 1).toLowerCase();
-  return (MEDIA_UPLOAD_EXTENSIONS as readonly string[]).includes(extension);
+  return ACCEPTED_MEDIA.includes(fileName.slice(dot + 1).toLowerCase());
 }
 
 /* ---------- The media worker protocol (ADR 0022 §3) ---------- */

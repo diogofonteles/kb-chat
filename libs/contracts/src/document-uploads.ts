@@ -48,23 +48,6 @@ export function hasDocumentExtension(name: string): boolean {
   return (DOCUMENT_UPLOAD_EXTENSIONS as readonly string[]).includes(extension);
 }
 
-const YOUTUBE_HOSTS = new Set([
-  'youtube.com',
-  'www.youtube.com',
-  'm.youtube.com',
-  'music.youtube.com',
-  'youtu.be',
-]);
-
-/** A YouTube link goes through the transcriber as a media item (KBC-142 BR-5). */
-export function isYoutubeUrl(url: string): boolean {
-  try {
-    return YOUTUBE_HOSTS.has(new URL(url).hostname.toLowerCase());
-  } catch {
-    return false;
-  }
-}
-
 /** A web link: http(s) with a host, nothing else (no file:, no credentials in it). */
 export const documentLinkSchema = z
   .url({ protocol: /^https?$/, hostname: z.regexes.domain })
@@ -132,6 +115,8 @@ export const createDocumentUploadRequestSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('url'),
     url: documentLinkSchema,
+    /** What the sender says it is; left out, the address decides (recordingLinkKind). */
+    as: z.enum(['page', 'recording']).optional(),
     level: levelRefSchema.optional(),
     batch: documentBatchRequestSchema.optional(),
   }),
@@ -143,7 +128,8 @@ export type CreateDocumentUploadRequest = z.infer<
 /**
  * Where a sent document is (FR-2): receiving its bytes, received (waiting for the Mac),
  * converting, classifying, mapping (kb-map), mapped (done on the Mac, on its way to the app
- * with the next sync), ready (in the app's catalog: search and map), failed. A YouTube link
+ * with the next sync), ready (in the app's catalog: search and map), failed. A list (channel,
+ * playlist) is `choosing` once the Mac read it: the person says which ones enter (KBC-186). A recording link
  * is transcribing while it goes through the media library.
  */
 export const DOCUMENT_UPLOAD_STATES = [
@@ -151,6 +137,7 @@ export const DOCUMENT_UPLOAD_STATES = [
   'received',
   'converting',
   'transcribing',
+  'choosing',
   'classifying',
   'mapping',
   'mapped',
@@ -183,10 +170,21 @@ export const uploadedDocumentRefSchema = z.object({
 });
 export type UploadedDocumentRef = z.infer<typeof uploadedDocumentRefSchema>;
 
+/** The most of a channel or playlist the Mac lists for the person to choose from. */
+export const RECORDING_LIST_MAX = 200;
+
+/** One recording of a list (KBC-186 R7), to be chosen before anything enters. */
+export const recordingEntrySchema = z.object({
+  url: documentLinkSchema,
+  title: z.string().min(1).max(300),
+  durationS: z.number().int().min(0).nullable(),
+});
+export type RecordingEntry = z.infer<typeof recordingEntrySchema>;
+
 export const documentUploadSchema = z.object({
   id: z.uuid(),
   topic: topicSlugSchema,
-  kind: z.enum(['file', 'url', 'youtube']),
+  kind: z.enum(['file', 'url', 'recording', 'list']),
   /** The file's name, or the link. */
   name: z.string(),
   state: documentUploadStateSchema,
@@ -195,7 +193,7 @@ export const documentUploadSchema = z.object({
   detail: z.string().nullable(),
   /** The document it became, once ready (or the one it repeats). */
   document: uploadedDocumentRefSchema.nullable(),
-  /** A YouTube link's media item in the library. */
+  /** A recording link's media item in the library. */
   mediaId: z.uuid().nullable(),
   /** A file: bytes announced and received so far. */
   bytes: z.number().int().min(0).nullable(),
@@ -206,6 +204,8 @@ export const documentUploadSchema = z.object({
   batch: documentBatchSchema.nullable(),
   /** Why it waits although the Mac could take it: a spending ceiling was reached. */
   heldBy: z.enum(['batch-cap', 'month-cap']).nullable(),
+  /** A list's recordings, while `choosing`; empty otherwise. */
+  entries: z.array(recordingEntrySchema),
   /** It failed, and the app still has what was sent: it can go again as it is. */
   retriable: z.boolean(),
   createdAt: z.iso.datetime(),
@@ -238,6 +238,22 @@ export const documentUploadListSchema = z.object({
 });
 export type DocumentUploadList = z.infer<typeof documentUploadListSchema>;
 
+/** POST /api/v1/document-uploads/:id/choose: the list's recordings that enter (R7). */
+export const chooseRecordingsRequestSchema = z.strictObject({
+  urls: z.array(documentLinkSchema).min(1).max(RECORDING_LIST_MAX),
+});
+export type ChooseRecordingsRequest = z.infer<
+  typeof chooseRecordingsRequestSchema
+>;
+export const chooseRecordingsResponseSchema = z.object({
+  created: z.number().int().min(0),
+  /** Already in the collection, or on their way. */
+  already: z.number().int().min(0),
+});
+export type ChooseRecordingsResponse = z.infer<
+  typeof chooseRecordingsResponseSchema
+>;
+
 /* ---------- The Mac's side: the doc-ingest job ---------- */
 
 export const docIngestSourceSchema = z.discriminatedUnion('kind', [
@@ -252,9 +268,15 @@ export const docIngestSourceSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('url'), url: z.string() }),
   /** Downloaded on the Mac and given back as audio to `audioPath` (POST, octet-stream). */
   z.object({
-    kind: z.literal('youtube'),
+    kind: z.literal('recording'),
     url: z.string(),
     audioPath: z.string(),
+  }),
+  /** Listed on the Mac and given back to `entriesPath` (POST, JSON). */
+  z.object({
+    kind: z.literal('list'),
+    url: z.string(),
+    entriesPath: z.string(),
   }),
 ]);
 export type DocIngestSource = z.infer<typeof docIngestSourceSchema>;
@@ -292,6 +314,14 @@ export const docIngestStateRequestSchema = docLeaseSchema.extend({
 });
 export type DocIngestStateRequest = z.infer<typeof docIngestStateRequestSchema>;
 
+/** POST …/jobs/:id/doc-entries: what a list holds, for the person to choose from. */
+export const docIngestEntriesRequestSchema = docLeaseSchema.extend({
+  entries: z.array(recordingEntrySchema).max(RECORDING_LIST_MAX),
+});
+export type DocIngestEntriesRequest = z.infer<
+  typeof docIngestEntriesRequestSchema
+>;
+
 /** POST …/jobs/:id/doc-result: how it ended; a failure says why (AC-4). */
 export const docIngestResultRequestSchema = docLeaseSchema.extend({
   outcome: z.discriminatedUnion('state', [
@@ -319,5 +349,5 @@ export type DocIngestResultRequest = z.infer<
   typeof docIngestResultRequestSchema
 >;
 
-/** The most audio a YouTube link may bring back (as an uploaded recording). */
+/** The most audio a recording link may bring back (as an uploaded recording). */
 export const DOC_INGEST_AUDIO_MAX_BYTES = 2 * 1024 * 1024 * 1024;

@@ -1,12 +1,12 @@
 import type { AbstractControl } from '@angular/forms';
 import {
   MEDIA_MAX_UPLOAD_BYTES,
-  hasAcceptedAudioExtension,
+  hasAcceptedMediaExtension,
 } from '@kb-chat/contracts';
 
 /** The rule shown before the choice (MA-20). */
 export const uploadRule = (): string =>
-  $localize`:@@media.upload.rule:mp3, m4a, wav, flac, ogg ou opus · até 4 GB cada`;
+  $localize`:@@media.upload.rule:mp3, m4a, wav, flac, ogg, opus ou vídeo (mp4, mov, webm, mkv) · até 4 GB cada`;
 
 /** Megabytes with a decimal below 10 MB ("2,9 MB"), whole above ("128 MB"). */
 const megabytes = (bytes: number): string => {
@@ -47,8 +47,8 @@ export const unreadableFile = (): string =>
 export function fileProblemOf(
   file: Pick<File, 'name' | 'size'>,
 ): string | null {
-  if (!hasAcceptedAudioExtension(file.name))
-    return $localize`:@@media.upload.badType:Este arquivo não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus.`;
+  if (!hasAcceptedMediaExtension(file.name))
+    return $localize`:@@media.upload.badType:Este arquivo não é um áudio nem um vídeo aceito. Envie mp3, m4a, wav, flac, ogg, opus, mp4, mov, webm ou mkv.`;
   if (file.size > MEDIA_MAX_UPLOAD_BYTES)
     return $localize`:@@media.upload.tooLarge:Este arquivo tem ${gigabytesAbove(file.size)}:size: GB. O limite é 4 GB.`;
   if (file.size === 0)

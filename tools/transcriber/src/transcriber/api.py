@@ -194,8 +194,12 @@ class ApiClient:
         body = {"outcome": outcome, "spendUsd": round(min(spend_usd, 0.5), 6)}
         return self._on_job(job, "doc-result", body)
 
-    def upload_youtube_audio(self, job: dict, audio: Path) -> str | None:
-        """A YouTube link's audio, back to the API as the sender's recording (KBC-142 BR-5)."""
+    def doc_entries(self, job: dict, entries: list[dict]) -> bool:
+        """What a channel or playlist holds, for the person to choose from (KBC-186)."""
+        return self._on_job(job, "doc-entries", {"entries": entries})
+
+    def upload_recording_audio(self, job: dict, audio: Path) -> str | None:
+        """A recording link's audio, back to the API as the sender's recording (KBC-142 BR-5)."""
         query = urllib.parse.urlencode({"leaseId": job["leaseId"], "name": audio.name})
         size = audio.stat().st_size
         with audio.open("rb") as body:
@@ -211,9 +215,9 @@ class ApiClient:
                     raise Unauthorized from err
                 if err.code == 409:
                     return None
-                raise ApiError(f"youtube audio answered {err.code}", err.code) from err
+                raise ApiError(f"recording audio answered {err.code}", err.code) from err
             except (urllib.error.URLError, TimeoutError, OSError) as err:
-                raise ApiError(f"youtube audio upload failed: {err}") from err
+                raise ApiError(f"recording audio upload failed: {err}") from err
 
     def report_sync(self, report: dict) -> None:
         """What the last automatic sync with production did (KBC-100 FR-4)."""

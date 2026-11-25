@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import type {
+  DocIngestEntriesRequest,
   DocIngestJob,
   DocIngestResultRequest,
   DocIngestSource,
@@ -39,7 +40,7 @@ export interface DocIngestQueueDeps {
   ) => Promise<void>;
   /** kb's spend, booked on the media month like kb-publish's (ADR 0035 §11). */
   readonly book?: (record: DocumentUploadRecord, usd: number) => void;
-  /** A YouTube link's audio becomes a media item of the sender (KBC-142 BR-5). */
+  /** A recording link's audio becomes a media item of the sender (KBC-142 BR-5). */
   readonly adoptAudio?: (
     record: DocumentUploadRecord,
     audio: {
@@ -293,7 +294,7 @@ export class DocIngestQueue {
     });
   }
 
-  /** A YouTube link's audio, downloaded on the Mac, goes to the library as the sender's. */
+  /** A recording link's audio, downloaded on the Mac, goes to the library as the sender's. */
   async adopt(
     owner: LeaseOwner,
     audio: {
@@ -303,7 +304,7 @@ export class DocIngestQueue {
     },
   ): Promise<string> {
     const record = this.held(owner);
-    if (record.kind !== 'youtube' || !this.deps.adoptAudio)
+    if (record.kind !== 'recording' || !this.deps.adoptAudio)
       throw new AppError('NOT_FOUND', 'No such audio for this job');
     const mediaId = await this.deps.adoptAudio(record, audio);
     await this.deps.records.put({
@@ -314,6 +315,26 @@ export class DocIngestQueue {
       updatedAt: this.now().toISOString(),
     });
     return mediaId;
+  }
+
+  /** A list read on the Mac: it waits for the person to choose (KBC-186 R7). */
+  async list(
+    owner: LeaseOwner,
+    request: DocIngestEntriesRequest,
+  ): Promise<void> {
+    const record = this.held(owner);
+    if (record.kind !== 'list')
+      throw new AppError('NOT_FOUND', 'No such list for this job');
+    const none = request.entries.length === 0;
+    await this.deps.records.put({
+      ...record,
+      state: none ? 'failed' : 'choosing',
+      failure: none ? 'empty' : null,
+      detail: none ? 'the list has no recordings' : null,
+      entries: request.entries,
+      lease: null,
+      updatedAt: this.now().toISOString(),
+    });
   }
 
   private async giveUp(
@@ -363,11 +384,17 @@ function sourceOf(record: DocumentUploadRecord): DocIngestSource {
       sha256: record.sha256 ?? '',
       filePath: jobPath(record.id, 'document'),
     };
-  if (record.kind === 'youtube')
+  if (record.kind === 'recording')
     return {
-      kind: 'youtube',
+      kind: 'recording',
       url: record.url ?? '',
-      audioPath: jobPath(record.id, 'youtube-audio'),
+      audioPath: jobPath(record.id, 'recording-audio'),
+    };
+  if (record.kind === 'list')
+    return {
+      kind: 'list',
+      url: record.url ?? '',
+      entriesPath: jobPath(record.id, 'doc-entries'),
     };
   return { kind: 'url', url: record.url ?? '' };
 }

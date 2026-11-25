@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   DOCUMENT_UPLOAD_FAILURES,
   DOCUMENT_UPLOAD_STATES,
+  recordingEntrySchema,
 } from '@kb-chat/contracts';
 import type {
   DocumentUploadRecord,
@@ -12,7 +13,7 @@ import { readJsonFile, writeJsonFile } from './atomic-json.js';
 const recordSchema = z.object({
   id: z.uuid(),
   topic: z.string(),
-  kind: z.enum(['file', 'url', 'youtube']),
+  kind: z.enum(['file', 'url', 'recording', 'list']),
   name: z.string(),
   url: z.string().nullable(),
   sha256: z.string().nullable(),
@@ -44,6 +45,7 @@ const recordSchema = z.object({
     .default(null),
   attempts: z.number(),
   spentUsd: z.number(),
+  entries: z.array(recordingEntrySchema).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

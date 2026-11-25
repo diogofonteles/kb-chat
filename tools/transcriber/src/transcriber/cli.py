@@ -192,7 +192,7 @@ def publisher_of(args: argparse.Namespace, vault: str | None, env: dict | None =
 
 def docs_of(publisher, env: dict | None = None):
     """Sent documents (KBC-149) go with kb-publish: the same vault, kb and lock, plus kb-map
-    (tools/kb-map, through uv) and, for YouTube links, yt-dlp when it is on PATH."""
+    (tools/kb-map, through uv) and, for recording links, yt-dlp when it is on PATH."""
     if publisher is None:
         return None
     from .doc_ingest import DocIngester, YtDlp, kb_map_or_none
@@ -200,8 +200,8 @@ def docs_of(publisher, env: dict | None = None):
     kb_map = kb_map_or_none(publisher.vault, env)
     if kb_map is None:
         return None
-    youtube = YtDlp(shutil.which("yt-dlp")) if shutil.which("yt-dlp") else None
-    return DocIngester(publisher, kb_map, youtube)
+    recordings = YtDlp(shutil.which("yt-dlp")) if shutil.which("yt-dlp") else None
+    return DocIngester(publisher, kb_map, recordings)
 
 
 def vault_sync_of(args: argparse.Namespace, config: dict, kb, state_file: Path | None = None):

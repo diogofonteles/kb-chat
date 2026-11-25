@@ -156,7 +156,7 @@ function findExisting(
   return null;
 }
 
-/** A YouTube link's media item: failed, live in the collection (ready), or on its way. */
+/** A recording link's media item: failed, live in the collection (ready), or on its way. */
 function mediaProgressOf(
   wiring: DocumentUploadsWiring,
   mediaId: string,
@@ -211,7 +211,7 @@ function book(
 }
 
 /**
- * KBC-142 BR-5: a YouTube link's audio becomes the sender's recording, with their rights as
+ * KBC-142 BR-5: a recording link's audio becomes the sender's recording, with their rights as
  * they stand now (a person removed or without "media-upload" since gets nothing).
  */
 async function adoptAudio(
@@ -229,7 +229,7 @@ async function adoptAudio(
       'the sender of this link may no longer send to this collection',
     );
   const item = wiring.mediaService.create(actor, record.topic, {
-    title: titleOfLink(record.name),
+    title: titleOfRecording(audio.name),
     author: null,
     fileName: audio.name,
     bytes: audio.bytes,
@@ -270,12 +270,10 @@ async function senderAsTheyStand(
   };
 }
 
-const titleOfLink = (url: string): string => {
-  try {
-    const parsed = new URL(url);
-    const id = parsed.searchParams.get('v') ?? parsed.pathname.slice(1);
-    return `YouTube ${id}`.slice(0, 200);
-  } catch {
-    return 'YouTube';
-  }
-};
+/** The recording's own title, from the file the Mac named after it ("Título [id].m4a"). */
+export const titleOfRecording = (fileName: string): string =>
+  fileName
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/\s*\[[^\][]*\]$/, '')
+    .trim()
+    .slice(0, 200) || 'Gravação';

@@ -1103,7 +1103,7 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
     const send = dialog.getByRole('button', { name: 'Enviar', exact: true });
     await expect(
       dialog
-        .getByText(/mp3, m4a, wav, flac, ogg ou opus/)
+        .getByText(/mp3, m4a, wav, flac, ogg, opus ou vídeo/)
         .and(page.locator(':visible')),
     ).toBeVisible();
     await shoot(page, 'media-upload', width);
@@ -1173,7 +1173,7 @@ test('"Enviar mídia": empty, a file chosen, a repeated one, a wrong one and sen
       buffer: Buffer.from('%PDF-1.4'),
     });
     await expect(
-      dialog.getByRole('alert').filter({ hasText: 'não é um áudio aceito' }),
+      dialog.getByRole('alert').filter({ hasText: 'não é um áudio nem um vídeo aceito' }),
     ).toBeVisible();
     await shoot(page, 'media-upload-bad-type', width);
     await dialog

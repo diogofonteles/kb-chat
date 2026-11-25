@@ -1,7 +1,7 @@
 import type { DocumentBatch, DocumentUpload } from '@kb-chat/contracts';
 import type { DocumentUploadRecord } from '../../ports/document-uploads.js';
 
-/** Where a YouTube link's media item is now (it goes through the library, KBC-142 BR-5). */
+/** Where a recording link's media item is now (it goes through the library, KBC-142 BR-5). */
 export type MediaProgress = 'transcribing' | 'ready' | 'failed';
 
 export const uploadUrlOf = (id: string): string =>
@@ -42,6 +42,7 @@ export function toDocumentUpload(
     uploadUrl: record.state === 'receiving' ? uploadUrlOf(record.id) : null,
     batch: input.batch,
     heldBy: record.state === 'received' ? input.heldBy : null,
+    entries: record.state === 'choosing' ? [...record.entries] : [],
     retriable: record.state === 'failed' && input.kept,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -52,7 +53,7 @@ const mediaStateOf = (
   record: DocumentUploadRecord,
   media: MediaProgress | null,
 ): MediaProgress | null =>
-  record.kind === 'youtube' && record.mediaId && media ? media : null;
+  record.kind === 'recording' && record.mediaId && media ? media : null;
 
 /** Done on the Mac is "no mapa" until the sync brings it to the catalog: then "pronto". */
 const stateOf = (record: DocumentUploadRecord, arrived: boolean) =>

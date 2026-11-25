@@ -1,12 +1,12 @@
 """Documents and links sent from the app (KBC-149, ADR 0040): the Mac's doc-ingest job.
 
 A doc-ingest job carries a file the app kept (fetched from the API), a web link, or a
-YouTube link. Under the same vault lock as kb-publish:
+recording link. Under the same vault lock as kb-publish:
 - a file or a link goes through `kb-map convert` (KBC-148: Docling, MarkItDown, Firecrawl or
   Jina, the original kept, `kb ingest file`), then kb's steps (`classify`, `index`, `link`,
   `index`), then the collection map (`kb-map sections --doc`) when the collection has one;
   the API is told each step and the result (or why it failed, AC-4);
-- a YouTube link has its audio downloaded here (`yt-dlp`) and given back to the API, where it
+- a recording link has its audio downloaded here (`yt-dlp`) and given back to the API, where it
   becomes the sender's recording and takes the media path (transcription, tracks, kb-publish:
   KBC-142 BR-5).
 kb-map, kb and yt-dlp are reached through ports, so tests run none of them.
@@ -27,7 +27,10 @@ from .kb_publish import KbPublisher, KbStepFailed
 KB_MAP_PROJECT = Path(__file__).resolve().parents[3] / "kb-map"
 CONVERT_TIMEOUT_S = 60 * 60
 MAP_TIMEOUT_S = 30 * 60
-YOUTUBE_TIMEOUT_S = 60 * 60
+RECORDING_TIMEOUT_S = 60 * 60
+LIST_TIMEOUT_S = 5 * 60
+# The most of a channel or playlist the app offers (RECORDING_LIST_MAX in the contracts).
+LIST_MAX = 200
 OUTPUT_CHARS = 2_000
 log = logging.getLogger("transcriber")
 
@@ -64,8 +67,10 @@ class KbMapPort(Protocol):
     def map_document(self, topic: str, doc_id: str, budget_usd: float) -> str: ...
 
 
-class YoutubePort(Protocol):
+class RecordingPort(Protocol):
     def download(self, url: str, folder: Path) -> Path: ...
+
+    def entries(self, url: str) -> list[dict]: ...
 
 
 def failure_of(outcome: dict) -> DocIngestFailed:
@@ -147,22 +152,59 @@ class KbMapCli:
 
 @dataclass
 class YtDlp:
-    """The audio of a YouTube link, as m4a, with `yt-dlp` on PATH; never run by the tests."""
+    """The audio of a recording link, as m4a, and what a list holds, with `yt-dlp` on PATH;
+    never run by the tests."""
 
     binary: str = "yt-dlp"
 
     def download(self, url: str, folder: Path) -> Path:
-        template = str(folder / "youtube.%(id)s.%(ext)s")
+        # Named after the recording: the app takes its title from the file's name.
+        template = str(folder / "%(title).120B [%(id)s].%(ext)s")
         command = [self.binary, "--no-playlist", "-x", "--audio-format", "m4a"]
         command += ["-o", template, "--", url]
-        done = subprocess.run(
-            command, capture_output=True, text=True, timeout=YOUTUBE_TIMEOUT_S, check=False
-        )
-        found = sorted(folder.glob("youtube.*.m4a"))
+        done = self._run(command, RECORDING_TIMEOUT_S)
+        found = sorted(folder.glob("*.m4a"))
         if done.returncode != 0 or not found:
             output = (done.stdout + done.stderr).strip()
             raise DocIngestFailed("conversion-failed", f"yt-dlp: {output}")
         return found[0]
+
+    def entries(self, url: str) -> list[dict]:
+        command = [self.binary, "--flat-playlist", "-J", "--playlist-end", str(LIST_MAX)]
+        command += ["--", url]
+        done = self._run(command, LIST_TIMEOUT_S)
+        if done.returncode != 0:
+            output = (done.stdout + done.stderr).strip()
+            raise DocIngestFailed("conversion-failed", f"yt-dlp: {output}")
+        return entries_of(json.loads(done.stdout))
+
+    @staticmethod
+    def _run(command: list[str], timeout: float) -> subprocess.CompletedProcess:
+        return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
+
+
+def entries_of(listing: dict) -> list[dict]:
+    """yt-dlp's listing as the app's entries: addresses with a title; a channel's tabs (lists
+    inside the list) are opened one level, and what has no address is left out."""
+    found: list[dict] = []
+    for entry in listing.get("entries") or []:
+        if not entry:
+            continue
+        if entry.get("_type") == "playlist":
+            found += entries_of(entry)
+            continue
+        url = entry.get("webpage_url") or entry.get("url")
+        if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+            continue
+        duration = entry.get("duration")
+        found.append(
+            {
+                "url": url,
+                "title": (str(entry.get("title") or "").strip() or url)[:300],
+                "durationS": int(duration) if isinstance(duration, int | float) else None,
+            }
+        )
+    return found[:LIST_MAX]
 
 
 def kb_map_or_none(vault: Path, env: dict[str, str] | None = None) -> KbMapCli | None:
@@ -194,7 +236,7 @@ class DocIngester:
 
     publisher: KbPublisher
     kb_map: KbMapPort
-    youtube: YoutubePort | None = None
+    recordings: RecordingPort | None = None
 
     def convert(self, job: dict, source: str, name: str | None) -> Converted:
         topic = job["topic"]

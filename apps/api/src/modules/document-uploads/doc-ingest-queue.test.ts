@@ -47,6 +47,7 @@ const record = (
   batch: null,
   attempts: 0,
   spentUsd: 0,
+  entries: [],
   createdAt: '2026-11-16T10:00:00.000Z',
   updatedAt: '2026-11-16T10:00:00.000Z',
   ...fields,
@@ -267,13 +268,13 @@ describe('the upload as people see it', () => {
         ...NOT_HELD,
       }),
     ).toMatchObject({ state: 'ready', detail: 'kb: ok' });
-    const youtube = record({
-      kind: 'youtube',
+    const recording = record({
+      kind: 'recording',
       state: 'transcribing',
       mediaId: done.id,
     });
     expect(
-      toDocumentUpload(youtube, {
+      toDocumentUpload(recording, {
         showsDetail: false,
         received: null,
         media: 'failed',

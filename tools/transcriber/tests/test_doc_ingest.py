@@ -6,7 +6,14 @@ import numpy as np
 import pytest
 
 from transcriber.api import ApiClient
-from transcriber.doc_ingest import DocIngester, DocIngestFailed, failure_of, title_of
+from transcriber.doc_ingest import (
+    LIST_MAX,
+    DocIngester,
+    DocIngestFailed,
+    entries_of,
+    failure_of,
+    title_of,
+)
 from transcriber.kb_publish import KbPublisher, KbRun
 from transcriber.worker import Worker
 
@@ -30,12 +37,12 @@ FILE_JOB = {
     },
 }
 URL_JOB = {**FILE_JOB, "source": {"kind": "url", "url": "https://example.org/artigo"}}
-YOUTUBE_JOB = {
+RECORDING_JOB = {
     **FILE_JOB,
     "source": {
-        "kind": "youtube",
+        "kind": "recording",
         "url": "https://youtu.be/abc",
-        "audioPath": "/api/v1/media-worker/jobs/77777777-7777-4777-8777-777777777777/youtube-audio",
+        "audioPath": f"/api/v1/media-worker/jobs/{FILE_JOB['id']}/recording-audio",
     },
 }
 
@@ -73,13 +80,17 @@ class FakeKbMap:
         return "written"
 
 
-class FakeYoutube:
+class FakeRecordings:
     def __init__(self) -> None:
         self.urls: list[str] = []
 
+    def entries(self, url: str) -> list[dict]:
+        self.urls.append(url)
+        return [{"url": "https://youtu.be/1", "title": "Um", "durationS": 60}]
+
     def download(self, url: str, folder: Path) -> Path:
         self.urls.append(url)
-        audio = folder / "youtube.abc.m4a"
+        audio = folder / "Uma aula [abc].m4a"
         audio.write_bytes(b"m4a audio")
         return audio
 
@@ -91,9 +102,9 @@ def vault(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def worker(api, vault, kb_map=None, kb=None, *, youtube=None, docs=True) -> Worker:
+def worker(api, vault, kb_map=None, kb=None, *, recordings=None, docs=True) -> Worker:
     publisher = KbPublisher(vault, kb or FakeKb(vault))
-    ingester = DocIngester(publisher, kb_map or FakeKbMap(vault), youtube) if docs else None
+    ingester = DocIngester(publisher, kb_map or FakeKbMap(vault), recordings) if docs else None
     return Worker(
         api=ApiClient(api.url, lambda: TOKEN, "mac-test"),
         model=FakeModel(),
@@ -267,15 +278,15 @@ def test_a_failing_kb_step_gives_the_job_back_with_kbs_output(fake_api, vault):
     assert fake_api.bodies("doc-result") == []
 
 
-def test_a_youtube_link_gives_its_audio_back_and_nothing_else(fake_api, vault):
-    fake_api.jobs[:] = [dict(YOUTUBE_JOB)]
-    youtube = FakeYoutube()
+def test_a_recording_link_gives_its_audio_back_and_nothing_else(fake_api, vault):
+    fake_api.jobs[:] = [dict(RECORDING_JOB)]
+    recordings = FakeRecordings()
     kb_map = FakeKbMap(vault)
 
-    assert worker(fake_api, vault, kb_map, youtube=youtube).step() == "job"
+    assert worker(fake_api, vault, kb_map, recordings=recordings).step() == "job"
 
-    assert youtube.urls == ["https://youtu.be/abc"]
-    posted = [c for c in fake_api.calls if c[1].endswith("/youtube-audio")]
+    assert recordings.urls == ["https://youtu.be/abc"]
+    posted = [c for c in fake_api.calls if c[1].endswith("/recording-audio")]
     assert len(posted) == 1
     _, _, body, headers = posted[0]
     assert body == {"bytes": len(b"m4a audio")}
@@ -286,8 +297,43 @@ def test_a_youtube_link_gives_its_audio_back_and_nothing_else(fake_api, vault):
     assert MEDIA_ID
 
 
-def test_without_yt_dlp_a_youtube_link_fails_with_why(fake_api, vault):
-    fake_api.jobs[:] = [dict(YOUTUBE_JOB)]
+def test_a_list_is_read_and_offered_and_nothing_is_downloaded(fake_api, vault):
+    url = "https://www.youtube.com/playlist?list=PL1"
+    path = f"/api/v1/media-worker/jobs/{FILE_JOB['id']}/doc-entries"
+    source = {"kind": "list", "url": url, "entriesPath": path}
+    fake_api.jobs[:] = [{**FILE_JOB, "source": source}]
+    recordings = FakeRecordings()
+    kb_map = FakeKbMap(vault)
+
+    assert worker(fake_api, vault, kb_map, recordings=recordings).step() == "job"
+
+    assert recordings.urls == [url]
+    (body,) = fake_api.bodies("doc-entries")
+    assert body["entries"] == [{"url": "https://youtu.be/1", "title": "Um", "durationS": 60}]
+    assert kb_map.converted == []
+    assert fake_api.bodies("doc-result") == []
+
+
+def test_a_listing_keeps_what_has_an_address_and_opens_the_tabs_of_a_channel():
+    listing = {
+        "entries": [
+            {"url": "https://youtu.be/1", "title": " Um ", "duration": 60.4},
+            None,
+            {"url": "abc", "title": "sem endereço"},
+            {"_type": "playlist", "entries": [{"webpage_url": "https://youtu.be/2"}]},
+        ]
+    }
+    assert entries_of(listing) == [
+        {"url": "https://youtu.be/1", "title": "Um", "durationS": 60},
+        {"url": "https://youtu.be/2", "title": "https://youtu.be/2", "durationS": None},
+    ]
+    assert entries_of({}) == []
+    many = {"entries": [{"url": f"https://youtu.be/{n}", "title": "t"} for n in range(300)]}
+    assert len(entries_of(many)) == LIST_MAX
+
+
+def test_without_yt_dlp_a_recording_link_fails_with_why(fake_api, vault):
+    fake_api.jobs[:] = [dict(RECORDING_JOB)]
     assert worker(fake_api, vault).step() == "job"
     (result,) = fake_api.bodies("doc-result")
     assert result["outcome"]["failure"] == "conversion-failed"

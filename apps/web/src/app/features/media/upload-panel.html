@@ -100,7 +100,7 @@
           >
             <span class="wide">{{ rule }}</span
             ><span class="narrow" i18n="@@media.upload.ruleShort"
-              >mp3, m4a, wav, flac, ogg ou opus · até 4 GB</span
+              >mp3, m4a, wav, flac, ogg, opus ou vídeo · até 4 GB</span
             >
           </p>
           <input
@@ -108,7 +108,7 @@
             class="visually-hidden"
             type="file"
             multiple
-            accept=".mp3,.m4a,.wav,.flac,.ogg,.opus,audio/*"
+            accept=".mp3,.m4a,.wav,.flac,.ogg,.opus,.mp4,.mov,.m4v,.webm,.mkv,audio/*,video/*"
             tabindex="-1"
             aria-hidden="true"
             (change)="fileChosen($event)"

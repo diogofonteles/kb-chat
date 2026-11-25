@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { Readable } from 'node:stream';
 import {
   DOCUMENT_BATCH_DEFAULT_USD,
-  isYoutubeUrl,
+  recordingLinkKind,
+  type ChooseRecordingsRequest,
+  type ChooseRecordingsResponse,
   type CreateDocumentUploadRequest,
   type CreateDocumentUploadResponse,
   type DocumentBatch,
@@ -56,7 +58,7 @@ export interface DocumentUploadServiceDeps {
   ) => ExistingDocument | null;
   /** The document is in the app's catalog (the sync brought it): the upload is "pronto". */
   readonly inCatalog: (topic: string, id: string) => boolean;
-  /** Where a YouTube link's media item is now. */
+  /** Where a recording link's media item is now. */
   readonly mediaProgressOf?: (mediaId: string) => MediaProgress | null;
   /** What the media month still has (ADR 0035 §11): at zero, everything waits. */
   readonly monthLeftUsd?: () => number;
@@ -185,6 +187,54 @@ export class DocumentUploadService {
     await this.deps.records.remove(id);
   }
 
+  /**
+   * The list's recordings that enter (KBC-186 R7): each one an item of the list's inclusion,
+   * at its level; what is already there counts apart. The list itself is done.
+   */
+  async choose(
+    actor: UploadActor,
+    id: string,
+    request: ChooseRecordingsRequest,
+  ): Promise<ChooseRecordingsResponse> {
+    const list = this.deps.records.get(id);
+    if (!list || !this.mayManage(actor, list)) throw notFound();
+    if (list.state !== 'choosing') throw notWaiting();
+    const offered = new Set(list.entries.map((one) => one.url));
+    const urls = [...new Set(request.urls)];
+    if (!urls.every((url) => offered.has(url)))
+      throw new AppError('VALIDATION_FAILED', 'Not a recording of this list', {
+        details: { field: 'urls' },
+      });
+    // The list leaves first: a second press finds nothing to choose from.
+    await this.deps.records.remove(id);
+    const fresh = urls.filter(
+      (url) => !this.repeated(actor, list.topic, { sha256: null, url }),
+    );
+    await this.deps.records.put(...fresh.map((url) => this.chosenOf(list, url)));
+    if (fresh.length > 0) this.deps.wake?.();
+    return { created: fresh.length, already: urls.length - fresh.length };
+  }
+
+  private chosenOf(
+    list: DocumentUploadRecord,
+    url: string,
+  ): DocumentUploadRecord {
+    const at = this.now().toISOString();
+    return {
+      ...list,
+      id: randomUUID(),
+      kind: 'recording',
+      name: list.entries.find((one) => one.url === url)?.title ?? url,
+      url,
+      state: 'received',
+      attempts: 0,
+      spentUsd: 0,
+      entries: [],
+      createdAt: at,
+      updatedAt: at,
+    };
+  }
+
   /** A failed item goes again as it was sent, with its attempts renewed. */
   async retry(actor: UploadActor, id: string): Promise<DocumentUpload> {
     const record = this.deps.records.get(id);
@@ -242,6 +292,7 @@ export class DocumentUploadService {
       lease: null,
       attempts: 0,
       spentUsd: 0,
+      entries: [],
       createdAt: at,
       updatedAt: at,
     };
@@ -432,13 +483,21 @@ function sourceOf(
       state: 'receiving',
     };
   return {
-    kind: isYoutubeUrl(request.url) ? 'youtube' : 'url',
+    kind: linkKindOf(request),
     name: request.url,
     url: request.url,
     sha256: null,
     bytes: null,
     state: 'received',
   };
+}
+
+/** What a link becomes: as its sender says, or as its address tells. */
+function linkKindOf(
+  request: Extract<CreateDocumentUploadRequest, { kind: 'url' }>,
+): 'url' | 'recording' | 'list' {
+  if (request.as) return request.as === 'page' ? 'url' : 'recording';
+  return recordingLinkKind(request.url) ?? 'url';
 }
 
 const keyOf = (request: CreateDocumentUploadRequest): UploadKey => ({

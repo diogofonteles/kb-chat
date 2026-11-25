@@ -1,5 +1,6 @@
 import {
   DOC_INGEST_AUDIO_MAX_BYTES,
+  docIngestEntriesRequestSchema,
   docIngestResultRequestSchema,
   docIngestStateRequestSchema,
   mediaJobIdSchema,
@@ -55,6 +56,7 @@ export const docIngestWorkerRoutes =
     registerFile(app, deps);
     registerState(app, deps);
     registerResult(app, deps);
+    registerEntries(app, deps);
     registerAudio(app, deps);
   };
 
@@ -118,10 +120,32 @@ function registerResult(app: FastifyInstance, deps: DocIngestWorkerRoutesDeps) {
     );
 }
 
-/** A YouTube link's audio (KBC-142 BR-5): it becomes the sender's media item. */
+/** A list's recordings (KBC-186 R7), for the person to choose from. */
+function registerEntries(
+  app: FastifyInstance,
+  deps: DocIngestWorkerRoutesDeps,
+) {
+  app
+    .withTypeProvider<ZodTypeProvider>()
+    .post(
+      '/api/v1/media-worker/jobs/:id/doc-entries',
+      posted(docIngestEntriesRequestSchema),
+      async (request, reply) => {
+        const jobId = request.params.id;
+        deps.assertDocWorker(request, jobId);
+        await deps.queue.list(
+          { jobId, ...deps.ownerOf(request, request.body) },
+          request.body,
+        );
+        return reply.code(204).send();
+      },
+    );
+}
+
+/** A recording link's audio (KBC-142 BR-5): it becomes the sender's media item. */
 function registerAudio(app: FastifyInstance, deps: DocIngestWorkerRoutesDeps) {
   app.withTypeProvider<ZodTypeProvider>().post(
-    '/api/v1/media-worker/jobs/:id/youtube-audio',
+    '/api/v1/media-worker/jobs/:id/recording-audio',
     {
       config: { access: PUBLIC },
       bodyLimit: DOC_INGEST_AUDIO_MAX_BYTES,

@@ -2,6 +2,7 @@ import type { Readable } from 'node:stream';
 import type {
   DocumentUploadFailure,
   DocumentUploadState,
+  RecordingEntry,
   UploadedDocumentRef,
 } from '@kb-chat/contracts';
 
@@ -11,7 +12,7 @@ export interface UploadOwner {
   /** For the levels audit when the document arrives with its level. */
   readonly email: string;
   readonly isMaster: boolean;
-  /** Their converted space for a YouTube link's audio; null: no quota (the owner). */
+  /** Their converted space for a recording link's audio; null: no quota (the owner). */
   readonly quotaBytes: number | null;
   readonly displayName: string | null;
 }
@@ -35,7 +36,7 @@ export interface UploadBatch {
 export interface DocumentUploadRecord {
   readonly id: string;
   readonly topic: string;
-  readonly kind: 'file' | 'url' | 'youtube';
+  readonly kind: 'file' | 'url' | 'recording' | 'list';
   /** The file's name, or the link. */
   readonly name: string;
   readonly url: string | null;
@@ -55,6 +56,8 @@ export interface DocumentUploadRecord {
   /** Attempts the Mac spent on it (a crash or a lost lease counts; its own setup does not). */
   readonly attempts: number;
   readonly spentUsd: number;
+  /** What a list holds, once the Mac read it and until the person chose. */
+  readonly entries: readonly RecordingEntry[];
   readonly createdAt: string;
   readonly updatedAt: string;
 }

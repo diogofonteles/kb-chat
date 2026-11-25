@@ -62,7 +62,7 @@ test('AC-1: a person who may upload sends an MP3, sees it go to "Pronta" and ope
   // The rule before the choice ("· até 4 GB cada"; a phone's sheet leaves "cada" out).
   await expect(
     dialog
-      .getByText(/^mp3, m4a, wav, flac, ogg ou opus · até 4 GB( cada)?$/)
+      .getByText(/^mp3, m4a, wav, flac, ogg, opus ou vídeo · até 4 GB( cada)?$/)
       .and(page.locator(':visible')),
   ).toBeVisible();
   await dialog.locator('input[type="file"]').setInputFiles(file);
@@ -102,7 +102,7 @@ test('AC-8: a file that is not audio is refused before sending', async ({
     buffer: Buffer.from('%PDF-1.4'),
   });
   await expect(dialog.getByRole('alert')).toContainText(
-    'Este arquivo não é um áudio aceito. Envie mp3, m4a, wav, flac, ogg ou opus.',
+    'Este arquivo não é um áudio nem um vídeo aceito. Envie mp3, m4a, wav, flac, ogg, opus, mp4, mov, webm ou mkv.',
   );
   await dialog.getByRole('button', { name: 'Cancelar' }).click();
   await expect(dialog).toBeHidden();

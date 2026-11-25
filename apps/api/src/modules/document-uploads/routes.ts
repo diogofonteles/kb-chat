@@ -1,5 +1,7 @@
 import {
   changeDocumentBatchRequestSchema,
+  chooseRecordingsRequestSchema,
+  chooseRecordingsResponseSchema,
   createDocumentUploadRequestSchema,
   createDocumentUploadResponseSchema,
   documentBatchSchema,
@@ -119,6 +121,15 @@ const REMOVE_OPTIONS = {
   schema: { params: uploadParams, response: { 204: z.undefined() } },
 };
 
+const CHOOSE_OPTIONS = {
+  config: { access: UPLOAD },
+  schema: {
+    params: uploadParams,
+    body: chooseRecordingsRequestSchema,
+    response: { 200: chooseRecordingsResponseSchema },
+  },
+};
+
 const RETRY_OPTIONS = {
   config: { access: UPLOAD },
   schema: { params: uploadParams, response: { 200: documentUploadSchema } },
@@ -133,6 +144,16 @@ function registerChanges(app: FastifyInstance, deps: DocumentUploadRouteDeps) {
       request.params.id,
       request.body.capUsd,
     ),
+  );
+  typed.post(
+    '/api/v1/document-uploads/:id/choose',
+    CHOOSE_OPTIONS,
+    async (request) =>
+      deps.service.choose(
+        deps.actorOf(request),
+        request.params.id,
+        request.body,
+      ),
   );
   typed.post(
     '/api/v1/document-uploads/:id/retry',

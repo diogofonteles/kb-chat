@@ -421,8 +421,11 @@ class Worker:
         if self.docs is None or self.publisher is None:
             raise RuntimeError("leased a doc-ingest job without kb-map")
         source = job["source"]
-        if source["kind"] == "youtube":
-            self._youtube(job, work)
+        if source["kind"] == "recording":
+            self._recording(job, work)
+            return None
+        if source["kind"] == "list":
+            self._list(job)
             return None
         # A collection created on the screen gets its folder first (KBC-114, KBC-009 R2).
         self._make_folder(self.publisher, job)
@@ -455,14 +458,24 @@ class Worker:
         if made:
             log.info("kb topic new: %s", ", ".join(made))
 
-    def _youtube(self, job: dict, work: Path) -> None:
-        """KBC-142 BR-5: the link's audio goes to the API and takes the media path."""
-        if self.docs is None or self.docs.youtube is None:
+    def _list(self, job: dict) -> None:
+        """A channel or playlist: what it holds, for the person to choose (KBC-186 R7)."""
+        if self.docs is None or self.docs.recordings is None:
             raise DocIngestFailed("conversion-failed", "yt-dlp is not on this Mac")
-        audio = self.docs.youtube.download(job["source"]["url"], work)
-        media_id = self.api.upload_youtube_audio(job, audio)
+        entries = self.docs.recordings.entries(job["source"]["url"])
+        if self.api.doc_entries(job, entries):
+            log.info("job %s: a list of %d recordings", job["id"], len(entries))
+        else:
+            log.warning("job %s: the lease was lost before the list: dropped", job["id"])
+
+    def _recording(self, job: dict, work: Path) -> None:
+        """KBC-142 BR-5: the link's audio goes to the API and takes the media path."""
+        if self.docs is None or self.docs.recordings is None:
+            raise DocIngestFailed("conversion-failed", "yt-dlp is not on this Mac")
+        audio = self.docs.recordings.download(job["source"]["url"], work)
+        media_id = self.api.upload_recording_audio(job, audio)
         if media_id:
-            log.info("job %s: the YouTube audio is the recording %s", job["id"], media_id)
+            log.info("job %s: its audio is the recording %s", job["id"], media_id)
         else:
             log.warning("job %s: the lease was lost before the audio: dropped", job["id"])
 

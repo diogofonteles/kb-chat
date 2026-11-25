@@ -379,25 +379,25 @@ describe('Sending documents and links from the app (KBC-149)', () => {
   });
 });
 
-describe('A YouTube link goes through the transcriber (KBC-142 BR-5)', () => {
+describe('A recording link goes through the transcriber (KBC-142 BR-5)', () => {
   it("the Mac gives its audio back and it becomes the sender's recording", async () => {
     const { media, ana } = await world();
     const sent = await ana.call('POST', DOCUMENTS, {
       kind: 'url',
       url: 'https://www.youtube.com/watch?v=abc123',
     });
-    expect(created(sent.body).kind).toBe('youtube');
+    expect(created(sent.body).kind).toBe('recording');
     const mac = await docMac(media);
     const job = await leaseDoc(media, mac.token);
     expect(job.source).toEqual({
-      kind: 'youtube',
+      kind: 'recording',
       url: 'https://www.youtube.com/watch?v=abc123',
-      audioPath: `/api/v1/media-worker/jobs/${job.id}/youtube-audio`,
+      audioPath: `/api/v1/media-worker/jobs/${job.id}/recording-audio`,
     });
     const audio = Buffer.from('ID3 fake m4a audio from youtube');
     const given = await media.started.app.inject({
       method: 'POST',
-      url: `/api/v1/media-worker/jobs/${job.id}/youtube-audio?leaseId=${job.leaseId}&name=abc123.m4a`,
+      url: `/api/v1/media-worker/jobs/${job.id}/recording-audio?leaseId=${job.leaseId}&name=abc123.m4a`,
       headers: {
         ...localHeaders(mac.token),
         'content-type': 'application/octet-stream',
