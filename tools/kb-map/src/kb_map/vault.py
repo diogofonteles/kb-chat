@@ -6,6 +6,7 @@ YAML frontmatter, NFC-normalised, as `read_document` reads it, so a section's po
 same number the research agent sees.
 """
 
+import json
 import os
 import re
 import tempfile
@@ -21,6 +22,8 @@ from .textutil import sha256_text
 
 FRONTMATTER = re.compile(r"^---\r?\n([\s\S]*?)\r?\n---\r?\n?")
 EXCLUDED_SEGMENT = "_quarantine"
+# The reason kb writes on what a person took out (the transcriber's `REMOVED`).
+TAKEN_OUT = "removed_by_person"
 # Kept originals (KBC-148) are never sources, whatever their extension.
 ORIGINALS_SEGMENT = "_originals"
 
@@ -101,6 +104,31 @@ class Topic:
                 continue
             ids.append(relative.as_posix())
         return sorted(ids)
+
+    def was_taken_out(self, doc_id: str) -> bool:
+        """A person took it out of the collection in the app (KBC-187): it is in kb's quarantine
+        as they left it, and may come back."""
+        apart = doc_id.replace("raw/", f"raw/{EXCLUDED_SEGMENT}/", 1)
+        if not self.resolve(apart).is_file():
+            return False
+        # kb's own record of its quarantine: the document keeps the reason kb judged before.
+        ledger = self.dir / ".decisions" / "quarantine-ledger.jsonl"
+        if not ledger.is_file():
+            return False
+        last: dict = {}
+        for line in ledger.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            if (row.get("op"), row.get("file" if row.get("op") == "move" else "original")) in (
+                ("move", apart),
+                ("restore", apart),
+            ):
+                last = row
+        return last.get("op") == "move" and last.get("reason") == TAKEN_OUT
 
     def read(self, doc_id: str) -> Document:
         path = self.resolve(doc_id)

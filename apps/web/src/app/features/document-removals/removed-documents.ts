@@ -1,0 +1,221 @@
+import { formatDate } from '@angular/common';
+import { httpResource } from '@angular/common/http';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  ElementRef,
+  LOCALE_ID,
+  computed,
+  effect,
+  inject,
+  linkedSignal,
+  signal,
+  viewChild,
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import {
+  documentRemovalListSchema,
+  type DocumentRemoval,
+  type DocumentRemovalList,
+  type DocumentRemovalState,
+} from '@kb-chat/contracts';
+import {
+  DocumentRemovalsApi,
+  documentRemovalsUrl,
+} from '@core/documents/document-removals-api.js';
+import { problemOf } from './removal-problem.js';
+import { UiButton, UiPill, type Tone } from '@ui/index.js';
+import { finalize, type Observable } from 'rxjs';
+
+/** While the Mac moves something, the list is read again at this pace. */
+const REFRESH_MS = 5_000;
+
+const STATES: Record<
+  Exclude<DocumentRemovalState, 'failed'>,
+  { readonly text: () => string; readonly tone: Tone }
+> = {
+  removing: {
+    text: () => $localize`:@@removed.removing:Fora; o Mac ainda move o arquivo`,
+    tone: 'info',
+  },
+  removed: {
+    text: () => $localize`:@@removed.removed:Removido`,
+    tone: 'muted',
+  },
+  restoring: {
+    text: () => $localize`:@@removed.restoring:Voltando; espera o Mac`,
+    tone: 'info',
+  },
+};
+
+/** What the Mac could not do: take it out (it is out of the app all the same), or bring it back. */
+const FAILED = {
+  removed: {
+    text: () =>
+      $localize`:@@removed.failedOut:Fora do app; o Mac não moveu o arquivo`,
+    tone: 'err',
+  },
+  present: {
+    text: () =>
+      $localize`:@@removed.failedBack:O Mac não conseguiu trazer de volta`,
+    tone: 'err',
+  },
+} as const;
+
+/**
+ * "Removidos do acervo" (KBC-187): what masters took out of the collections, by whom and when,
+ * and "Trazer de volta". What the Mac has not moved yet says so.
+ */
+@Component({
+  selector: 'app-removed-documents',
+  imports: [UiButton, UiPill],
+  template: `
+    @if (problem(); as message) {
+      <p class="error" role="alert">{{ message }}</p>
+    }
+    @if (removals.error() && !known()) {
+      <p class="error" role="alert" i18n="@@removed.unread">
+        Não consegui ler os removidos. Atualize a página.
+      </p>
+    } @else if (!known()) {
+      <p class="muted" i18n="@@removed.loading">Carregando…</p>
+    } @else {
+      <p #lead class="muted" tabindex="-1">
+        @if (items().length === 0) {
+          <span i18n="@@removed.none"
+            >Nada removido. Um documento sai do acervo pelo menu ⋯ dele.</span
+          >
+        } @else {
+          <span i18n="@@removed.lead"
+            >Fora da busca, da leitura e da Pesquisa com IA. Nada foi
+            apagado.</span
+          >
+        }
+      </p>
+      <ul class="list">
+        @for (one of items(); track one.id) {
+          <li class="row">
+            <div class="text">
+              <p class="title">{{ one.document.title }}</p>
+              <p class="meta">
+                <span i18n="@@removed.meta"
+                  >{{ one.collection }} · {{ one.by }} · {{ when(one) }}</span
+                >
+              </p>
+              @if (one.detail) {
+                <p class="detail">{{ one.detail }}</p>
+              }
+            </div>
+            <ui-pill [tone]="stateOf(one).tone">{{
+              stateOf(one).text()
+            }}</ui-pill>
+            <div class="actions">
+              @if (one.state === 'failed') {
+                <button
+                  uiButton="outline"
+                  size="sm"
+                  type="button"
+                  [attr.aria-disabled]="busy()"
+                  [attr.aria-label]="retryLabel(one)"
+                  (click)="act(api.retry(one.id))"
+                >
+                  <span i18n="@@removed.retry">Tentar de novo</span>
+                </button>
+              }
+              @if (one.asked === 'removed') {
+                <button
+                  uiButton="outline"
+                  size="sm"
+                  type="button"
+                  [attr.aria-disabled]="busy()"
+                  [attr.aria-label]="restoreLabel(one)"
+                  (click)="act(api.restore(one.id))"
+                >
+                  <span i18n="@@removal.restore">Trazer de volta</span>
+                </button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  `,
+  styleUrl: './removed-documents.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class RemovedDocuments {
+  private readonly locale = inject(LOCALE_ID);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly lead = viewChild<ElementRef<HTMLElement>>('lead');
+  protected readonly api = inject(DocumentRemovalsApi);
+
+  protected readonly removals = httpResource(documentRemovalsUrl, {
+    parse: (body) => documentRemovalListSchema.parse(body),
+  });
+  /** As last read: a reading that fails meanwhile takes nothing off the screen. */
+  protected readonly known = linkedSignal<
+    DocumentRemovalList | null,
+    DocumentRemovalList | null
+  >({
+    source: () => (this.removals.hasValue() ? this.removals.value() : null),
+    computation: (read, before) => read ?? before?.value ?? null,
+  });
+  protected readonly items = computed(() => this.known()?.items ?? []);
+  protected readonly busy = signal(false);
+  protected readonly problem = signal('');
+
+  constructor() {
+    // The Mac moves it in its own time: what waits for it is read again until it is done.
+    effect((onCleanup) => {
+      // Read again after a reading that failed too.
+      this.removals.status();
+      const waits = this.items().some(
+        ({ state }) => state === 'removing' || state === 'restoring',
+      );
+      if (!waits) return;
+      const timer = setTimeout(() => this.removals.reload(), REFRESH_MS);
+      onCleanup(() => clearTimeout(timer));
+    });
+  }
+
+  protected stateOf(one: DocumentRemoval) {
+    return one.state === 'failed' ? FAILED[one.asked] : STATES[one.state];
+  }
+
+  protected when(one: DocumentRemoval): string {
+    return formatDate(one.removedAt, 'dd/MM/yyyy HH:mm', this.locale);
+  }
+
+  protected restoreLabel({ document }: DocumentRemoval): string {
+    return $localize`:@@removed.restoreOf:Trazer de volta ${document.title}:title:`;
+  }
+
+  protected retryLabel({ document }: DocumentRemoval): string {
+    return $localize`:@@removed.retryOf:Tentar de novo ${document.title}:title:`;
+  }
+
+  protected act(work: Observable<unknown>): void {
+    if (this.busy()) return;
+    this.busy.set(true);
+    this.problem.set('');
+    work
+      .pipe(
+        finalize(() => this.busy.set(false)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe({
+        next: () => this.settled(),
+        error: (err: unknown) => {
+          this.problem.set(problemOf(err));
+          this.removals.reload();
+        },
+      });
+  }
+
+  /** The button pressed is gone: the focus stays in the list. */
+  private settled(): void {
+    this.lead()?.nativeElement.focus();
+    this.removals.reload();
+  }
+}

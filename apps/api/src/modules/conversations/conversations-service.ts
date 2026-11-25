@@ -10,7 +10,12 @@ import {
 import { AppError } from '../../app-error.js';
 import type { ConversationStorePort } from '../../ports/conversation-store.js';
 import type { LevelView } from '../../ports/level-view.js';
-import { maskConversation, type ScopeOf } from './conversation-mask.js';
+import {
+  maskConversation,
+  maskRemoved,
+  type IsRemoved,
+  type ScopeOf,
+} from './conversation-mask.js';
 import {
   mergeResearchTurns,
   unmaskResearchTurns,
@@ -31,6 +36,8 @@ export interface ConversationsServiceDeps {
   readonly store: ConversationStorePort;
   /** The catalog's collection and sub-collections, to judge a stored source (KBC-110). */
   readonly scopeOf?: ScopeOf;
+  /** Taken out of the collection (KBC-187): its source is as one the reader may not see. */
+  readonly isRemoved?: IsRemoved;
   /** Whether the person's research turn runs in this process (KBC-029); none by default. */
   readonly isLive?: (principal: string, turnId: string) => boolean;
   /** When this process started (ms); default: when the service was built. */
@@ -110,11 +117,12 @@ export class ConversationsService {
     const conversation = await this.deps.store.get(principal, id);
     if (!conversation) return null;
     const settled = settleDeadTurns(conversation, this.liveness(principal));
-    return maskConversation(
+    const masked = maskConversation(
       settled,
       viewOf(settled.topic),
       this.deps.scopeOf ?? (() => undefined),
     );
+    return maskRemoved(masked, this.deps.isRemoved ?? (() => false));
   }
 
   /** A page's snapshot; research turns merge by id with what the server recorded (KBC-029). */

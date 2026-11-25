@@ -76,14 +76,15 @@ export function toDocumentUpload(
 
 /** What can still be done about one that failed. */
 const endIn = (
-  { refused }: DocumentUploadRecord,
+  { refused, failure }: DocumentUploadRecord,
   state: DocumentUpload['state'],
   context: UploadContext,
 ): Pick<DocumentUpload, 'refused' | 'retriable'> => {
   const failed = state === 'failed';
   return {
     refused: failed && refused ? refusedView(refused, context) : null,
-    retriable: failed && context.kept,
+    // What a master took out is not sent again from here.
+    retriable: failed && context.kept && failure !== 'removed',
   };
 };
 

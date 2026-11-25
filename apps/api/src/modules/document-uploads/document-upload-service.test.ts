@@ -643,6 +643,23 @@ describe('the third review (review C)', () => {
     });
   });
 
+  it("what kb's account has left is the masters' to know (KBC-009 BR-3)", async () => {
+    const { service } = await world({
+      deps: {
+        mac: () => ({
+          state: 'on',
+          lastSeenAt: null,
+          doing: null,
+          lowBalanceUsd: 0.4,
+        }),
+      },
+    });
+    expect((await service.list(master)).work?.mac.lowBalanceUsd).toBe(0.4);
+    expect((await service.list(ana)).work?.mac).not.toHaveProperty(
+      'lowBalanceUsd',
+    );
+  });
+
   it('nobody knows when the next starts while the Mac is at something else (I8)', async () => {
     const { service } = await world({
       deps: {
@@ -666,8 +683,11 @@ describe('what kb refused, decided by a person (KBC-009)', () => {
     excerpt: '# Entrar no site',
   };
 
-  async function refusedPage(url = 'https://a.example/1') {
-    const made = await world();
+  async function refusedPage(
+    url = 'https://a.example/1',
+    deps: Partial<DocumentUploadServiceDeps> = {},
+  ) {
+    const made = await world({ deps });
     const sent = await send(made.service, ana, link(url));
     const job = made.queue.lease('mac');
     await made.queue.complete(
@@ -798,6 +818,25 @@ describe('what kb refused, decided by a person (KBC-009)', () => {
     await service.accept(master, sent.id);
     await expect(service.accept(master, other.id)).rejects.toMatchObject({
       code: 'DOCUMENT_DUPLICATE',
+    });
+  });
+
+  it('its own document, out of the quarantine and failed after, is not a repeat (T-1)', async () => {
+    const found = {
+      topic: 'hermetismo',
+      document: { id: 'raw/articles/rasa.md', title: 'Rasa' },
+    };
+    const there = { own: false };
+    const { service, sent, records } = await refusedPage(undefined, {
+      findExisting: () => (there.own ? found : null),
+    });
+    await records.update(sent.id, (one) => ({
+      ...one,
+      refused: one.refused && { ...one.refused, accepted: true },
+    }));
+    there.own = true;
+    expect(await service.accept(master, sent.id)).toMatchObject({
+      state: 'received',
     });
   });
 

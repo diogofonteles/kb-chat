@@ -68,6 +68,8 @@ const FAILURE_TEXTS: Record<DocumentUploadFailure, () => string> = {
     $localize`:@@docUploads.failure.notAccepted:O kb deixou este documento de fora do acervo. Tente de novo para ver o que foi lido e decidir.`,
   'not-allowed': () =>
     $localize`:@@docUploads.failure.notAllowed:A gravação passa da cota de envio de quem a incluiu, ou essa pessoa não pode mais enviar para este acervo. Fale com um master.`,
+  removed: () =>
+    $localize`:@@docUploads.failure.removed:Um master tirou este documento do acervo. Peça a um master para trazê-lo de volta.`,
   'gave-up': () =>
     $localize`:@@docUploads.failure.gaveUp:O Mac tentou três vezes e desistiu. Envie de novo mais tarde.`,
   'upload-abandoned': () =>

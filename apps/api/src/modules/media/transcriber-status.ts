@@ -178,6 +178,15 @@ export class TranscriberStatusBoard {
     return kinds.includes('kb-publish') ? 'publishing' : null;
   }
 
+  /** What kb's account had when a transcriber last told (KBC-009 BR-3). */
+  kbBalanceUsd(): number | null {
+    const told = [...this.reports.values()].filter(
+      (one) => one.kbBalanceUsd !== undefined,
+    );
+    const last = told.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+    return last[0]?.kbBalanceUsd ?? null;
+  }
+
   /** Whether a transcriber said anything at or after this moment. */
   saidSince(at: Date): boolean {
     return [...this.reports.values()].some(

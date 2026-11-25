@@ -16,6 +16,7 @@ import { SealedSettingsStore } from './adapters/sealed-settings-store.js';
 import { SecretBox, deriveKey, loadSecretsKey } from './adapters/secret-box.js';
 import { createHouseAi } from './house-ai-factory.js';
 import { createWebSearch } from './web-search-factory.js';
+import { JsonDocumentRemovalStore } from './adapters/json-document-removal-store.js';
 import { JsonDocumentStore } from './adapters/json-document-store.js';
 import { createDelivery } from './delivery-factory.js';
 import { JsonPeopleStore } from './adapters/json-people-store.js';
@@ -35,6 +36,10 @@ import { JsonSettingsStore } from './adapters/json-settings-store.js';
 import { createAiProviders } from './providers/create-ai-providers.js';
 import { AuthorDirectory, AuthorsService } from './modules/authors/index.js';
 import { CatalogRegistry } from './modules/catalog/index.js';
+import {
+  RemovalRecords,
+  RemovedVault,
+} from './modules/document-removals/index.js';
 import {
   CollectionRegistry,
   CollectionsVault,
@@ -63,15 +68,23 @@ const sealer = new SecretBox(secretsKey);
 const collections = new CollectionRegistry(
   new JsonDocumentStore(join(config.KB_CHAT_STATE_DIR, 'collections.json')),
 );
-const vault = new CollectionsVault(
-  new FsVaultAdapter(config.KB_VAULT),
-  collections,
+// What was taken out of its collection in the app is in no reading of the vault (KBC-187).
+const removals = await RemovalRecords.open(
+  new JsonDocumentRemovalStore(
+    join(config.KB_CHAT_STATE_DIR, 'document-removals.json'),
+  ),
+);
+const vault = new RemovedVault(
+  new CollectionsVault(new FsVaultAdapter(config.KB_VAULT), collections),
+  removals,
 );
 const index = await createSearchIndex({ config, vault, log: logger });
 const ledger = new JsonlSpendLedger(
   join(config.KB_CHAT_STATE_DIR, 'spend.jsonl'),
 );
-const catalog = new CatalogRegistry(vault);
+const catalog = new CatalogRegistry(vault, (topic, id) =>
+  removals.isRemoved(topic, id),
+);
 await catalog.load();
 // The authors of each collection (KBC-049, ADR 0030), in the state dir like the registry.
 const authorDirectory = new AuthorDirectory(
@@ -178,6 +191,7 @@ const app = await buildApp({
   webSearch,
   media,
   collections,
+  removals,
   authorDirectory,
   levels: levelsOnDisk(config.KB_CHAT_STATE_DIR),
 });

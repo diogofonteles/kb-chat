@@ -47,7 +47,42 @@ export class CatalogRegistry {
   private readonly views = new WeakMap<TopicCatalog, ScopeView>();
   private readonly listeners: (() => void)[] = [];
 
-  constructor(private readonly vault: VaultReaderPort) {}
+  /** One reading at a time: one that began before another never undoes it. */
+  private reading: Promise<void> = Promise.resolve();
+
+  constructor(
+    private readonly vault: VaultReaderPort,
+    /** What no one reads now (KBC-187), whatever the vault had when it was read. */
+    private readonly isHidden: (topic: string, id: string) => boolean = () =>
+      false,
+  ) {}
+
+  private inTurn(read: () => Promise<void>): Promise<void> {
+    const run = this.reading.then(read);
+    this.reading = run.catch(() => undefined);
+    return run;
+  }
+
+  /** The collection without what is hidden now, as it was read otherwise. */
+  private shown(catalog: TopicCatalog): TopicCatalog {
+    const { slug } = catalog.topic;
+    const entries = [...catalog.entries.values()];
+    const kept = entries.filter(({ id }) => !this.isHidden(slug, id));
+    if (kept.length === entries.length) return catalog;
+    return {
+      topic: catalog.topic,
+      entries: new Map(kept.map((entry) => [entry.id, entry])),
+      relations: new RelationIndex(kept.values()),
+    };
+  }
+
+  /** What was hidden since the collection was read leaves it at once, with nothing read. */
+  hide(slug: string): void {
+    const catalog = this.catalogs.get(slug);
+    if (!catalog) return;
+    this.catalogs = new Map(this.catalogs).set(slug, this.shown(catalog));
+    this.reloaded();
+  }
 
   /**
    * Told after every load or refresh: what the catalog sees changed (KBC-100 FR-6). A
@@ -67,13 +102,17 @@ export class CatalogRegistry {
     }
   }
 
-  async load(): Promise<void> {
+  load(): Promise<void> {
+    return this.inTurn(() => this.loadAll());
+  }
+
+  private async loadAll(): Promise<void> {
     const topics = await this.vault.listTopics();
     const loaded = await Promise.all(
       topics.map((topic) => loadTopicCatalog(this.vault, topic)),
     );
     this.catalogs = new Map(
-      loaded.map((catalog) => [catalog.topic.slug, catalog]),
+      loaded.map((catalog) => [catalog.topic.slug, this.shown(catalog)]),
     );
     this.reloaded();
   }
@@ -82,14 +121,18 @@ export class CatalogRegistry {
    * Reads one collection again (created or renamed on the screen, KBC-048 FR-3) without
    * reloading the others; a slug the vault and the registry no longer have is dropped.
    */
-  async refresh(slug: string): Promise<void> {
+  refresh(slug: string): Promise<void> {
+    return this.inTurn(() => this.refreshOne(slug));
+  }
+
+  private async refreshOne(slug: string): Promise<void> {
     const topic = (await this.vault.listTopics()).find(
       (one) => one.slug === slug,
     );
     const loaded = topic ? await loadTopicCatalog(this.vault, topic) : null;
     // Swapped after every await, so two refreshes at once never drop each other's topic.
     const next = new Map(this.catalogs);
-    if (loaded) next.set(slug, loaded);
+    if (loaded) next.set(slug, this.shown(loaded));
     else next.delete(slug);
     this.catalogs = next;
     this.reloaded();

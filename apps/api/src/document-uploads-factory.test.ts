@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mediaProgressOf } from './document-uploads-factory.js';
+import { macNow, mediaProgressOf } from './document-uploads-factory.js';
 
 type Wiring = Parameters<typeof mediaProgressOf>[0];
 
@@ -100,5 +100,29 @@ describe('where a recording sent by its link is (KBC-184)', () => {
     ],
   ])('%s', (_name, of, expected) => {
     expect(mediaProgressOf(library(of), ID)).toEqual(expected);
+  });
+});
+
+describe('what the Mac said, as the list says it (KBC-009 BR-3)', () => {
+  const mac = (usd: number | null) => ({
+    isPaired: () => true,
+    lastSeenAt: () => new Date().toISOString(),
+    doing: () => null,
+    percentOf: () => null,
+    kbBalanceUsd: () => usd,
+  });
+
+  it.each([
+    [0.99, 0.99],
+    [0, 0],
+    [-0.2, -0.2],
+    [1, null],
+    [12, null],
+    [null, null],
+  ])('%s in the account is said as %s', (usd, said) => {
+    expect(macNow(mac(usd)).lowBalanceUsd).toBe(said);
+    expect(macNow({ ...mac(usd), isPaired: () => false }).lowBalanceUsd).toBe(
+      said,
+    );
   });
 });

@@ -63,10 +63,14 @@ def _sections_problems(
             problems.append(
                 Problem("sections", doc, f"coverage ends at {expected} of {data.get('length')}")
             )
-    known = set(documents)
-    for doc in layout.section_docs():
-        if doc not in known:
+    for doc in sorted(set(layout.section_docs()) - set(documents)):
+        # What a person took out keeps its place in the map: it may come back (KBC-187).
+        data = read_json(layout.sections_file(doc)) if topic.was_taken_out(doc) else None
+        if data is None:
             problems.append(Problem("orphan", doc, "sections of a source that no longer exists"))
+            continue
+        hashes[doc] = data.get("body_sha256", "")
+        all_keys |= {section_key(doc, one.get("id", "?")) for one in data.get("sections", [])}
     return problems, ok_keys, all_keys, hashes
 
 

@@ -1,5 +1,6 @@
 """Documents and links sent from the app (KBC-149): a fake kb-map, kb and yt-dlp."""
 
+import json
 import shutil
 import subprocess
 import threading
@@ -643,6 +644,17 @@ def refused_page(vault: Path) -> Path:
         '---\ntitle: "Rasa"\ntriage: quarantined\ntriage_reason: thin\n---\n# Rasa\n\nEntrar.\n',
         encoding="utf-8",
     )
+    # kb's own ledger has its refusals too, with its reason (R3-I2).
+    move = {
+        "op": "move",
+        "file": REFUSED,
+        "original": REFUSED.replace("_quarantine/", ""),
+        "reason": "thin",
+    }
+    decisions = vault / "hermetismo" / ".decisions"
+    decisions.mkdir(exist_ok=True)
+    with (decisions / "quarantine-ledger.jsonl").open("a", encoding="utf-8") as rows:
+        rows.write(json.dumps(move) + "\n")
     return page
 
 
@@ -679,17 +691,18 @@ def test_what_a_person_accepts_enters_with_the_usual_steps(fake_api, vault):
     assert not page.exists()
 
 
-def test_accepted_elsewhere_says_so_and_never_a_title_of_kbs_list(fake_api, vault, monkeypatch):
-    refused_page(vault)
+def test_kbs_list_without_its_item_never_turns_publishing_off(fake_api, vault, monkeypatch):
+    """A title in kb's list reads like a missing key: it is never taken as kb's words (S-4)."""
+    page = refused_page(vault)
     fake_api.jobs[:] = [accept_job(REFUSED)]
     kb = FakeKb(vault)
     listing = '{"items": [{"id": "x", "subject": "a.md", "title": "FOO_API_KEY is not set"}]}'
     monkeypatch.setattr(kb, "refusals", lambda _topic: KbRun(ok=True, output=listing))
     worker(fake_api, vault, kb=kb).step()
-    (failed,) = fake_api.bodies("fail")
-    assert "no item waits for raw/articles/rasa.md" in failed["detail"]
-    assert "API_KEY" not in failed["detail"]
-    assert not failed.get("configuration")
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "ready"
+    assert fake_api.bodies("fail") == []
+    assert not page.exists()
 
 
 def test_accepted_before_a_crash_only_the_steps_that_follow_run(fake_api, vault):
@@ -773,3 +786,275 @@ def test_the_real_yt_dlp_opens_nothing_through_a_forwarding_page(tmp_path, monke
             YtDlp().download(url, tmp_path)
     server.shutdown()
     assert touched == []
+
+
+def move_job(kind: str, document: str) -> dict:
+    return {**FILE_JOB, "budgetUsd": 0, "source": {"kind": kind, "document": document}}
+
+
+def a_document(vault: Path) -> Path:
+    inside = vault / "hermetismo" / "raw" / "articles" / "o-caibalion.md"
+    inside.parent.mkdir(parents=True, exist_ok=True)
+    inside.write_text("---\ntitle: O Caibalion\n---\n", encoding="utf-8")
+    return inside
+
+
+def test_a_document_goes_out_of_the_collection_and_back(fake_api, vault):
+    inside = a_document(vault)
+    apart = vault / "hermetismo" / "raw" / "_quarantine" / "articles" / "o-caibalion.md"
+    kb = FakeKb(vault)
+    for kind, there, out in (("remove", apart, inside), ("restore", inside, apart)):
+        fake_api.jobs[:] = [move_job(kind, "raw/articles/o-caibalion.md")]
+        worker(fake_api, vault, kb=kb).step()
+        assert fake_api.bodies("doc-result")[-1]["outcome"] == {"state": "moved"}
+        assert there.is_file()
+        assert not out.is_file()
+    assert [step for step, *_ in kb.calls] == ["accept", "index", "accept", "index"]
+    # Nothing is paid for it.
+    assert all(budget == 0 for _step, _topic, budget in kb.calls)
+    assert [body["spendUsd"] for body in fake_api.bodies("doc-result")] == [0, 0]
+
+
+def test_what_is_where_it_was_asked_to_be_is_only_indexed_again(fake_api, vault):
+    """The attempt that moved it may have ended before the index (I-5)."""
+    inside = a_document(vault)
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("restore", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    inside.unlink()
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    states = [body["outcome"]["state"] for body in fake_api.bodies("doc-result")]
+    assert states == ["moved", "moved"]
+    assert [step for step, *_ in kb.calls] == ["index", "index"]
+
+
+def test_what_is_not_in_the_quarantine_any_more_cannot_come_back(fake_api, vault):
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("restore", "raw/articles/sumiu.md")]
+    worker(fake_api, vault, kb=kb).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "failed"
+    assert "quarantine any more" in result["outcome"]["detail"]
+    assert kb.calls == []
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        "wiki/concepts/ritmo.md",
+        "raw/_originals/a.md",
+        "raw/../../outro/raw/a.md",
+        "raw/.git/a.md",
+        "raw/articles/a.txt",
+        "/raw/articles/a.md",
+    ],
+)
+def test_only_a_document_of_the_collection_is_moved(fake_api, vault, document):
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", document)]
+    worker(fake_api, vault, kb=kb).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "failed"
+    assert kb.calls == []
+
+
+def test_a_move_kb_refuses_goes_back_to_the_queue(fake_api, vault, monkeypatch):
+    inside = a_document(vault)
+    kb = FakeKb(vault)
+    monkeypatch.setattr(kb, "accept", lambda *_: KbRun(ok=False, output="kb: no such item"))
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    (failed,) = fake_api.bodies("fail")
+    assert "no such item" in failed["detail"]
+    assert inside.is_file()
+
+
+def rows_of(vault: Path) -> list[dict]:
+    return FakeKb(vault)._rows("hermetismo")
+
+
+def test_a_move_kb_refuses_leaves_nothing_waiting_in_kbs_queue(fake_api, vault, monkeypatch):
+    a_document(vault)
+    kb = FakeKb(vault)
+    monkeypatch.setattr(kb, "accept", lambda *_: KbRun(ok=False, output="refs: file is locked"))
+    for _attempt in range(3):
+        fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+        worker(fake_api, vault, kb=kb).step()
+    assert {row["status"] for row in rows_of(vault)} == {"rejected"}
+
+
+def test_the_decision_a_crash_left_is_the_one_used(fake_api, vault):
+    a_document(vault)
+    decisions = vault / "hermetismo" / ".decisions"
+    decisions.mkdir()
+    row = {
+        "id": "rv-antes00001",
+        "queue": "remove",
+        "subject": "raw/articles/o-caibalion.md",
+        "evidence": "a person, in the app",
+        "action": {"reason": "removed_by_person"},
+        "status": "pending",
+    }
+    # Cut half-way, with no end of line: the next row is not glued to it.
+    (decisions / "review.jsonl").write_text(json.dumps(row), encoding="utf-8")
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    assert [call[1] for call in kb.calls if call[0] == "accept"] == ["rv-antes00001"]
+    fake_api.jobs[:] = [move_job("restore", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    assert [row["status"] for row in rows_of(vault)] == ["accepted", "accepted"]
+
+
+def test_a_row_is_never_glued_to_one_cut_half_way(fake_api, vault):
+    a_document(vault)
+    decisions = vault / "hermetismo" / ".decisions"
+    decisions.mkdir()
+    other = {"id": "rv-x", "queue": "gate", "subject": "raw/a.md", "status": "pending"}
+    (decisions / "review.jsonl").write_text(json.dumps(other), encoding="utf-8")
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    assert rows_of(vault)[0]["id"] == "rv-x"
+    assert len(rows_of(vault)) == 2
+
+
+@pytest.mark.parametrize("judged", ["", "triage_reason: off_topic\n"])
+def test_what_a_person_took_out_sent_again_comes_back(fake_api, vault, judged):
+    """kb's index of duplicates has its quarantine: nothing new is written (B-2). Whatever kb
+    had judged of it before, which it keeps in the document."""
+    inside = a_document(vault)
+    inside.write_text(inside.read_text(encoding="utf-8").replace("---\n", f"---\n{judged}", 1))
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    apart = "raw/_quarantine/articles/o-caibalion.md"
+    fake_api.jobs[:] = [{**URL_JOB, "mayBringBack": True}]
+    outcome = {"state": "duplicate", "document": apart, "usd": 0.001}
+    worker(fake_api, vault, FakeKbMap(vault, outcome), kb=kb).step()
+    result = fake_api.bodies("doc-result")[-1]
+    assert result["outcome"] == {
+        "state": "ready",
+        "document": {"id": "raw/articles/o-caibalion.md", "title": "O Caibalion"},
+        "review": False,
+    }
+    assert inside.is_file()
+
+
+def test_what_kb_had_refused_sent_again_waits_for_a_person(fake_api, vault):
+    refused_page(vault)
+    fake_api.jobs[:] = [dict(URL_JOB)]
+    outcome = {"state": "duplicate", "document": REFUSED}
+    worker(fake_api, vault, FakeKbMap(vault, outcome)).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["failure"] == "not-accepted"
+    assert result["outcome"]["refused"]["reason"] == "thin"
+
+
+def test_what_moved_goes_with_the_next_sync(fake_api, vault):
+    a_document(vault)
+    pending = []
+
+    class Sync:
+        def mark_pending(self):
+            pending.append(True)
+
+        def due(self):
+            return False
+
+    made = worker(fake_api, vault, kb=FakeKb(vault))
+    made.sync = Sync()
+    made._sync_if_due = lambda: None
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    made.step()
+    assert pending == [True]
+
+
+def test_a_decision_left_waiting_is_closed_when_it_is_not_wanted(fake_api, vault):
+    """kb refused it and could not close it; then it was asked back before it moved."""
+    a_document(vault)
+    decisions = vault / "hermetismo" / ".decisions"
+    decisions.mkdir()
+    row = {
+        "id": "rv-espera0001",
+        "queue": "remove",
+        "subject": "raw/articles/o-caibalion.md",
+        "evidence": "a person, in the app",
+        "status": "pending",
+    }
+    (decisions / "review.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("restore", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    assert [row["status"] for row in rows_of(vault)] == ["rejected"]
+
+
+def test_kb_writing_its_state_is_waited_for_and_then_it_waits(fake_api, vault, monkeypatch):
+    import fcntl
+
+    from transcriber import kb_publish
+
+    a_document(vault)
+    decisions = vault / "hermetismo" / ".decisions"
+    decisions.mkdir()
+    monkeypatch.setattr(kb_publish, "LOCK_TRIES", 2)
+    monkeypatch.setattr(kb_publish, "LOCK_WAIT_S", 0)
+    kb = FakeKb(vault)
+    with open(decisions / "state.jsonl.lock", "a+") as held:
+        fcntl.flock(held, fcntl.LOCK_EX)
+        fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+        worker(fake_api, vault, kb=kb).step()
+    assert kb.calls == []
+    assert not (decisions / "review.jsonl").exists()
+
+
+def test_a_queue_cut_in_a_character_does_not_stop_it(fake_api, vault):
+    a_document(vault)
+    decisions = vault / "hermetismo" / ".decisions"
+    decisions.mkdir()
+    (decisions / "review.jsonl").write_bytes('{"subject": "raw/ação'.encode()[:-1])
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    assert fake_api.bodies("doc-result")[-1]["outcome"] == {"state": "moved"}
+
+
+def test_included_all_the_same_with_no_item_of_kb_left(fake_api, vault, monkeypatch):
+    """kb's own item was decided in the terminal: the person's decision does the same."""
+    page = refused_page(vault)
+    kb = FakeKb(vault)
+    monkeypatch.setattr(kb, "refusals", lambda _topic: KbRun(ok=True, output='{"items": []}'))
+    fake_api.jobs[:] = [accept_job(REFUSED)]
+    worker(fake_api, vault, kb=kb).step()
+    (result,) = fake_api.bodies("doc-result")
+    assert result["outcome"]["state"] == "ready"
+    assert not page.exists()
+
+
+def test_the_same_text_sent_by_who_is_no_master_stays_out(fake_api, vault):
+    """Another original of the same text: kb finds it in its quarantine (KBC-187 BR-1)."""
+    inside = a_document(vault)
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    fake_api.jobs[:] = [{**URL_JOB, "mayBringBack": False}]
+    outcome = {"state": "duplicate", "document": "raw/_quarantine/articles/o-caibalion.md"}
+    worker(fake_api, vault, FakeKbMap(vault, outcome), kb=kb).step()
+    result = fake_api.bodies("doc-result")[-1]
+    assert result["outcome"]["failure"] == "removed"
+    assert not inside.is_file()
+
+
+def test_a_ledger_cut_in_a_character_is_read_all_the_same(fake_api, vault):
+    a_document(vault)
+    kb = FakeKb(vault)
+    fake_api.jobs[:] = [move_job("remove", "raw/articles/o-caibalion.md")]
+    worker(fake_api, vault, kb=kb).step()
+    ledger = vault / "hermetismo" / ".decisions" / "quarantine-ledger.jsonl"
+    with ledger.open("ab") as rows:
+        rows.write('{"op": "move", "file": "raw/ação'.encode()[:-1])
+    from transcriber.kb_publish import taken_out_by_person
+
+    apart = "raw/_quarantine/articles/o-caibalion.md"
+    assert taken_out_by_person(vault / "hermetismo", apart)

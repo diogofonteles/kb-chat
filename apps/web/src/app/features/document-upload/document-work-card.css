@@ -47,9 +47,16 @@ dt {
   min-width: 0;
 }
 
+.low {
+  color: var(--color-warn, var(--color-text));
+  font-size: var(--text-sm);
+}
+
+.low a,
 .line a {
-  display: inline-block;
-  padding: var(--space-2) 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
   color: var(--color-text);
   font-weight: 700;
 }

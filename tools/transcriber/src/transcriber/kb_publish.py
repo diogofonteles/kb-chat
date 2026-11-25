@@ -21,11 +21,14 @@ import os
 import re
 import shutil
 import subprocess
+import time
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, TextIO
 
 # index before link gives link its vector neighbours; the last index makes link's keys
 # searchable (spike, item 7).
@@ -84,6 +87,10 @@ class KbPort(Protocol):
         """`kb review accept`: what was refused goes into the collection."""
         ...
 
+    def reject(self, topic: str, item: str) -> KbRun:
+        """`kb review reject`: the item is closed and nothing moves."""
+        ...
+
 
 class KbStepFailed(Exception):
     """A kb step exited with an error: the job fails with kb's output (AC-4) and what kb
@@ -129,6 +136,63 @@ def review_item_of(output: str, document: str) -> str | None:
         if item.get("subject") == document and (item.get("action") or {}).get("quarantined"):
             return str(item["id"])
     return None
+
+
+# kb holds its lock for a write at a time.
+LOCK_TRIES = 60
+LOCK_WAIT_S = 0.5
+BY_A_PERSON = "a person, in the app"
+# What kb writes on what a person took out (`triage_reason`).
+REMOVED = "removed_by_person"
+
+
+LEDGER = "quarantine-ledger.jsonl"
+
+
+def taken_out_by_person(folder: Path, apart: str) -> bool:
+    """kb's own record of its quarantine says a person put it there, and it was not brought back.
+    Not the document's `triage_reason`: kb keeps the one it had judged before."""
+    ledger = folder / ".decisions" / LEDGER
+    if not ledger.is_file():
+        return False
+    last: dict = {}
+    for line in ledger.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        moved = row.get("op") == "move" and row.get("file") == apart
+        back = row.get("op") == "restore" and row.get("original") == apart
+        if moved or back:
+            last = row
+    return last.get("op") == "move" and last.get("reason") == REMOVED
+
+
+def locked_soon(lock: TextIO) -> None:
+    for _try in range(LOCK_TRIES):
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            time.sleep(LOCK_WAIT_S)
+    raise VaultBusy("kb is writing the collection's decisions")
+
+
+def pending_item_of(review: str, document: str, queue: str) -> str | None:
+    """The app's own item that waits for this document in kb's queue, if any."""
+    waiting = None
+    for line in review.splitlines():
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict) or row.get("evidence") != BY_A_PERSON:
+            continue
+        if row.get("subject") == document and row.get("queue") == queue:
+            waiting = str(row["id"]) if row.get("status") == "pending" else None
+    return waiting
 
 
 def undecided_in(output: str) -> tuple[set[str], bool]:
@@ -181,6 +245,9 @@ class KbCli:
 
     def refusals(self, topic: str) -> KbRun:
         return self._run([self.binary, "review", topic, "--queue", "gate", "--format", "json"])
+
+    def reject(self, topic: str, item: str) -> KbRun:
+        return self._run([self.binary, "review", "reject", item, "--topic", topic, "--budget", "0"])
 
     def accept(self, topic: str, item: str) -> KbRun:
         """Local (kb 0.0.12): restoring a document asks no model."""
@@ -379,6 +446,81 @@ class KbPublisher:
             if folder.is_dir() and not any(folder.iterdir()):
                 folder.rmdir()
 
+    def quarantine(self, topic: str, document: str) -> None:
+        """A document out of the collection (KBC-187): kb moves it to its quarantine, with what
+        it needs to bring it back, by an item of its own review queue that says a person did."""
+        self._decide(topic, document, queue="remove", action={"reason": REMOVED})
+
+    def restore(self, topic: str, document: str) -> None:
+        """And back: by the item kb may have for it, or by one that says a person did."""
+        listed = self.kb.refusals(topic)
+        if listed.ok and review_item_of(listed.output, document):
+            self.accept(topic, document)
+            return
+        action = {"quarantined": True, "reason": "manual", "stage": "manual"}
+        self._decide(topic, document, queue="gate", action=action)
+
+    def _decide(self, topic: str, document: str, *, queue: str, action: dict) -> None:
+        item = self._item_for(topic, document, queue=queue, action=action)
+        done = self.kb.accept(topic, item)
+        if done.ok:
+            return
+        # Left pending, a bulk `kb review accept` would do later what nobody asks any more.
+        # (A `gate` item rejected means "keep it apart" to kb: what failed half-way is set right
+        # by the next attempt, which finds the file where it is.)
+        self.kb.reject(topic, item)
+        raise KbStepFailed("review accept", done.output)
+
+    def _item_for(self, topic: str, document: str, *, queue: str, action: dict) -> str:
+        """The person's decision in kb's own queue: the one a crash left there, or a new one."""
+        folder = self.vault / topic / ".decisions"
+        folder.mkdir(exist_ok=True)
+        # kb writes its state under this lock (flock); its queue it only appends to. Taken here,
+        # what is added never lands in the middle of one of kb's writes.
+        with open(folder / "state.jsonl.lock", "a+") as lock:
+            locked_soon(lock)
+            review = folder / "review.jsonl"
+            # A row cut in the middle of a character is skipped, as kb does.
+            text = review.read_text(encoding="utf-8", errors="replace") if review.is_file() else ""
+            waiting = pending_item_of(text, document, queue)
+            if waiting:
+                return waiting
+            item = f"rv-{uuid.uuid4().hex[:10]}"
+            row = {
+                "id": item,
+                "queue": queue,
+                "purpose": "manual",
+                "subject": document,
+                "question": "manual",
+                "probability": 1,
+                "receipt_key": "",
+                "evidence": BY_A_PERSON,
+                "action": action,
+                "status": "pending",
+                "created": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+            # A file cut half-way has no end of line: the two rows would be lost as one.
+            gap = "" if text in ("", None) or text.endswith("\n") else "\n"
+            with review.open("a", encoding="utf-8") as rows:
+                rows.write(gap + json.dumps(row, ensure_ascii=False) + "\n")
+        return item
+
+    def forget(self, topic: str, document: str, queue: str) -> None:
+        """The person's decision that waits and is not wanted any more: closed in kb's queue."""
+        review = self.vault / topic / ".decisions" / "review.jsonl"
+        if not review.is_file():
+            return
+        text = review.read_text(encoding="utf-8", errors="replace")
+        item = pending_item_of(text, document, queue)
+        if item:
+            self.kb.reject(topic, item)
+
+    def reindex(self, topic: str) -> None:
+        """The search index as the collection is now: local, spends nothing."""
+        run = self.kb.run("index", topic, 0.0)
+        if not run.ok:
+            raise KbStepFailed("index", run.output)
+
     def accept(self, topic: str, document: str) -> None:
         """The document kb refused, back in the collection, by its item in kb's review queue."""
         listed = self.kb.refusals(topic)
@@ -386,8 +528,10 @@ class KbPublisher:
             raise KbStepFailed("review", listed.output)
         item = review_item_of(listed.output, document)
         if item is None:
-            # Never the listing itself: the titles in it are anyone's words, not kb's.
-            raise KbStepFailed("review", f"no item waits for {document}")
+            # kb's own item is gone (decided in the terminal, or it was a person's removal):
+            # a person's decision does the same.
+            self.restore(topic, document)
+            return
         done = self.kb.accept(topic, item)
         if not done.ok:
             raise KbStepFailed("review accept", done.output)
