@@ -9,8 +9,9 @@ text gets, over the whole topic: `classify`, `index`, `link`, `index`. kb is rea
 
 The flags and receipts below are the ones the owner's spike verified on kb 0.0.12
 (2026-11-06): `--budget` exists on `classify` and `link` only (`kb index --topic <t>` is
-local and refuses it; with `--embed=false` QMD then embeds only this topic); the spend is the `decisions:` and `generation:` receipt lines; a
-budget reached leaves documents "undecided" with exit 0, which is reported as incomplete.
+local and refuses it; with `--embed=false` QMD then embeds only this topic); the spend is the
+`decisions:` and `generation:` receipt lines; a budget reached leaves documents "undecided"
+with exit 0, which is reported as incomplete.
 """
 
 import fcntl
