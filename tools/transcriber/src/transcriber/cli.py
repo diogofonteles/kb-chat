@@ -130,8 +130,8 @@ def run(args: argparse.Namespace) -> int:
     if publisher:
         status.kb_balance = KbBalance(lambda: key_of(publisher)).last
     reporter = StatusReporter(api)
-    # Woken by launchd every few minutes (KBC-188): "preparing" is said only when there is
-    # work, never on each turn.
+    # Woken by launchd every few minutes (KBC-188): no "preparing" notice on each turn; the
+    # worker's own status says what it does once it has a job.
     woken = profile() is not None
     if not woken:
         announce_preparing(status, reporter)

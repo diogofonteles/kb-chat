@@ -213,3 +213,37 @@ def test_the_local_app_publishing_leaves_the_change_in_the_vault(fake_api, tmp_p
     assert agent.sync is None
     agent.step()
     assert (vault / ".kb-chat-sync-pending").exists()
+
+
+def test_a_woken_run_reads_its_own_app_and_is_off_at_once(fake_api, tmp_path, monkeypatch):
+    """The path that turns production's wake on (review R2): its config, no notice, one lease."""
+    from .conftest import TOKEN as API_TOKEN
+    from .conftest import FakeModel
+
+    (tmp_path / "config.json").write_text(json.dumps({"api_url": "http://localhost:1"}))
+    (tmp_path / "config-producao.json").write_text(json.dumps({"api_url": fake_api.url}))
+    monkeypatch.setattr(cli, "CONFIG_FILE", tmp_path / "config.json")
+    token = tmp_path / "token"
+    token.write_text(API_TOKEN, encoding="utf-8")
+    token.chmod(0o600)
+    monkeypatch.setenv("KB_CHAT_TRANSCRIBER_TOKEN_FILE", str(token))
+    monkeypatch.setattr(cli, "_mlx", lambda: (FakeModel(), lambda text: 1))
+    monkeypatch.setattr("transcriber.audio.ffmpeg_bin", lambda: "/usr/bin/true")
+    notices = []
+    monkeypatch.setattr(cli, "announce_preparing", lambda *args: notices.append(args))
+    fake_api.jobs.clear()
+    quiet = ["--no-kb-publish", "--no-diarize", "--no-voice-profiles", "--exit-when-idle"]
+    assert cli.main(["run", "--profile", "producao", *quiet]) == 0
+    assert notices == []
+    leases = [call for call in fake_api.calls if call[1].endswith("/lease")]
+    assert len(leases) == 1
+
+
+def test_woken_with_work_it_keeps_the_grace_for_the_next_stage(fake_api):
+    from .test_worker import worker
+
+    agent = worker(fake_api, idle_grace_s=0.01)
+    agent.woken = True
+    assert agent.run(exit_when_idle=True) == 0
+    # The job, then an empty lease and the grace, then one more: the next stage may come.
+    assert len([c for c in fake_api.calls if c[1].endswith("/lease")]) == 3
