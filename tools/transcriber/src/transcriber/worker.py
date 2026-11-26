@@ -5,6 +5,7 @@ lease then expires and the API puts the job back in the queue (ADR 0022 §2). On
 time: a transcription and a separation never run together on this Mac (KBC-064 BR-5).
 """
 
+import contextlib
 import logging
 import tempfile
 import threading
@@ -41,7 +42,7 @@ from .topic import TopicConflict, ensure_topic
 from .transcribe import Stopped, TokenCounter, WhisperModel, build_prompt, estimate_tokens
 from .transcribe import transcribe_track as run_track
 from .vad import SpeechFinder
-from .vault_sync import VaultSync
+from .vault_sync import VaultSync, mark_vault_pending
 from .voiceprint import (
     Embedder,
     PrintHold,
@@ -103,6 +104,10 @@ class Worker:
     # and this many lease errors in a row end it too (the owner: never on for nothing).
     idle_grace_s: float = IDLE_GRACE_S
     max_idle_errors: int = MAX_IDLE_ERRORS
+    # Started by launchd on its own clock, not by an API with a job waiting (KBC-188): with
+    # nothing to do, or the API out of reach, it ends at once.
+    woken: bool = False
+    handled: bool = field(default=False, init=False, repr=False)
     # Kinds this Mac cannot do now, and why (KBC-117): never asked for, told to the app.
     unavailable: list[dict] = field(default_factory=list)
     # Reads the kb's keys again (the Keychain): a `keys set` while this run goes on is seen
@@ -181,11 +186,15 @@ class Worker:
             # Only the API out of reach counts: a job that broke is given back (review BR-15).
             errors = errors + 1 if outcome == "lease-error" else 0
             if outcome == "job":
+                self.handled = True
                 idle_once = False
                 if once:
                     break
             elif outcome == "idle":
                 if once:
+                    break
+                # Woken by launchd with nothing to do (KBC-188): off at once.
+                if exit_when_idle and self.woken and not self.handled:
                     break
                 if exit_when_idle:
                     # On only when needed (the owner): a grace for the next stage, then off.
@@ -195,7 +204,11 @@ class Worker:
                     self.stop.wait(self.idle_grace_s)
                 else:
                     self.stop.wait(self.poll_s)
-            elif exit_when_idle and (outcome == "revoked" or errors >= self.max_idle_errors):
+            elif exit_when_idle and (
+                outcome == "revoked"
+                or errors >= self.max_idle_errors
+                or (self.woken and outcome == "lease-error")
+            ):
                 # Never sits in memory retrying: launchd or the API starts it again later.
                 log.error("transcriber stopped: the API cannot be used now")
                 return 1
@@ -237,11 +250,24 @@ class Worker:
             return "idle"
         return self._run_job(job)
 
+    def _published(self) -> None:
+        """The vault changed: production is sent it, by this app or the other one (KBC-188)."""
+        if self.sync is not None:
+            self.sync.mark_pending()
+        if self.publisher is not None:
+            mark_vault_pending(self.publisher.vault)
+
     def _sync_if_due(self) -> None:
-        """Between jobs only: a change waiting for production goes there (BR-7)."""
+        """Between jobs only: a change waiting for production goes there (BR-7). Under the
+        vault's lock: the other app this Mac serves may be writing in it (KBC-188)."""
         if self.sync is None:
             return
-        report = self.sync.run_if_due()
+        try:
+            with self.publisher.locked() if self.publisher else contextlib.nullcontext():
+                report = self.sync.run_if_due()
+        except VaultBusy:
+            # It stays pending: the next turn sends it.
+            return
         if report is None:
             return
         level = logging.INFO if report["ok"] else logging.ERROR
@@ -371,8 +397,7 @@ class Worker:
             return
         progress["percent"] = 100
         # The vault changed on this Mac whatever happens to the lease: production follows.
-        if self.sync is not None:
-            self.sync.mark_pending()
+        self._published()
         if self.api.upload_kb_result(job, result):
             count = len(result["documents"])
             log.info("job %s: %d documents in %s", job["id"], count, job["topic"])
@@ -429,8 +454,8 @@ class Worker:
 
     def _ingested(self, job: dict, progress: dict, outcome: dict, spent: float) -> None:
         progress["percent"] = 100
-        if self.sync is not None and outcome["state"] in ("ready", "moved"):
-            self.sync.mark_pending()
+        if outcome["state"] in ("ready", "moved"):
+            self._published()
         if self.api.doc_result(job, outcome, spent):
             log.info("job %s: %s in %s", job["id"], outcome["state"], job["topic"])
             self._sync_if_due()

@@ -21,6 +21,19 @@ SYNC_TIMEOUT_S = 60 * 60
 REPORT_CHARS = 2_000
 
 
+# In the vault, beside its lock: one change pending for the whole vault (KBC-188).
+PENDING_MARKER = ".kb-chat-sync-pending"
+
+
+def pending_marker(vault: Path) -> Path:
+    return Path(vault) / PENDING_MARKER
+
+
+def mark_vault_pending(vault: Path) -> None:
+    """The vault changed: whichever app this Mac serves sends it to production."""
+    pending_marker(vault).touch()
+
+
 def run_script(command: list[str]) -> tuple[int, str]:
     """The real script, its output joined; never called by the tests."""
     try:
@@ -55,6 +68,11 @@ class VaultSync:
     # Where `pending` and `last_run` survive a restart (launchd restarts the worker).
     state_file: Path | None = None
 
+    @property
+    def marker(self) -> Path:
+        """What any app this Mac serves leaves in the vault when it publishes (KBC-188)."""
+        return pending_marker(self.vault)
+
     def load(self) -> None:
         """The state of the previous run; none (or unreadable) is a change: sync once."""
         if self.state_file is None:
@@ -82,6 +100,9 @@ class VaultSync:
         self._save()
 
     def due(self) -> bool:
+        # Another app this Mac serves may have published into the same vault.
+        if self.marker.exists():
+            self.pending = True
         if not self.pending:
             return False
         return self.last_run is None or self.clock() - self.last_run >= self.interval_s
@@ -94,9 +115,12 @@ class VaultSync:
         if not self.due():
             return None
         started = self.clock()
+        published = self.marker.exists()
         code, output = self.runner(self.command())
         self.last_run = self.clock()
         self.pending = code != 0
+        if published and code == 0:
+            self.marker.unlink(missing_ok=True)
         self._save()
         return {
             "ok": code == 0,

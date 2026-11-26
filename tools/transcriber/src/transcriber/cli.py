@@ -12,7 +12,7 @@ import sys
 import threading
 from pathlib import Path
 
-from .config import PROFILE_ENV, of_profile
+from .config import PROFILE_ENV, of_profile, profile
 from .secret import CachedToken, TokenError, load_token, save_keychain
 
 CONFIG_FILE = (
@@ -130,7 +130,11 @@ def run(args: argparse.Namespace) -> int:
     if publisher:
         status.kb_balance = KbBalance(lambda: key_of(publisher)).last
     reporter = StatusReporter(api)
-    announce_preparing(status, reporter)
+    # Woken by launchd every few minutes (KBC-188): "preparing" is said only when there is
+    # work, never on each turn.
+    woken = profile() is not None
+    if not woken:
+        announce_preparing(status, reporter)
     model, count = _mlx()
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -159,6 +163,7 @@ def run(args: argparse.Namespace) -> int:
         # KBC-117: what it cannot do now (the kb's AI key missing), never leased, told why.
         unavailable=unavailable,
         reload_kb_env=lambda: kb_env(keys_of()),
+        woken=woken,
     )
     if args.poll:
         worker.poll_s = args.poll
@@ -392,7 +397,12 @@ def main(argv: list[str] | None = None) -> int:
         help="another app this Mac serves, with its own token and service (KBC-188): producao",
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    pairing = commands.add_parser("pair", help="store the token shown on the Transcritores screen")
+    # The same option after the subcommand too (`transcriber pair --profile producao …`).
+    profiled_parser = argparse.ArgumentParser(add_help=False)
+    profiled_parser.add_argument("--profile", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
+    pairing = commands.add_parser(
+        "pair", parents=[profiled_parser], help="store the token shown on the Transcritores screen"
+    )
     pairing.add_argument("--api-url", required=True)
     pairing.add_argument("--name")
     pairing.add_argument(
@@ -408,7 +418,9 @@ def main(argv: list[str] | None = None) -> int:
         help="do not install the background service (KBC-114: it is installed by default)",
     )
     pairing.set_defaults(handler=pair)
-    running = commands.add_parser("run", help="lease and transcribe jobs until stopped")
+    running = commands.add_parser(
+        "run", parents=[profiled_parser], help="lease and transcribe jobs until stopped"
+    )
     running.add_argument("--once", action="store_true", help="at most one job, then exit")
     running.add_argument(
         "--exit-when-idle", action="store_true", help="exit when the queue is empty"
@@ -436,7 +448,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     running.set_defaults(handler=run)
     background = commands.add_parser(
-        "service", help="keep the worker on in the background with launchd (KBC-114)"
+        "service",
+        parents=[profiled_parser],
+        help="keep the worker on in the background with launchd (KBC-114)",
     )
     background.add_argument("action", choices=("install", "uninstall", "status"))
     background.add_argument("--vault", help="the kb vault on this Mac (KB_CHAT_VAULT)")
@@ -450,7 +464,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     background.set_defaults(handler=service)
     secrets = commands.add_parser(
-        "keys", help="the kb's AI keys in the Keychain, for the service (KBC-117)"
+        "keys",
+        parents=[profiled_parser],
+        help="the kb's AI keys in the Keychain, for the service (KBC-117)",
     )
     secrets.add_argument("action", choices=("set", "status", "delete"))
     secrets.add_argument(

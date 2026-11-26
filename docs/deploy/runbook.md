@@ -232,7 +232,9 @@ uv run --project tools/transcriber transcriber --profile producao pair --api-url
 
 - O serviço da produção (`br.com.nova-alexandria.transcriber.producao`) liga sozinho a cada 5 min, pega o que houver e desliga; o do app local continua ligando quando a API local o chama.
 - `transcriber --profile producao service status` diz o estado; o log é `~/Library/Logs/nova-alexandria-transcriber/service-producao.log`.
-- A sincronização com a produção (7b) fica com o perfil da produção.
+- A sincronização com a produção (7b) fica com o perfil da produção, sob a trava do cofre: nunca envia enquanto o outro perfil escreve nele. O que o app local publica deixa a marca `.kb-chat-sync-pending` no cofre, e a produção a leva na próxima vez.
+- Um despertar sem trabalho desliga na hora (sem anunciar "preparando"); com a produção fora do ar, também.
+- Na produção, a tela Transcritores mostra o Mac **desligado** entre um despertar e outro: é o normal. Para ligá-lo na hora, no Mac: `launchctl kickstart gui/$(id -u)/br.com.nova-alexandria.transcriber.producao` (o comando que a tela sugere é o do app local).
 
 ## 8. Primeiro deploy
 
