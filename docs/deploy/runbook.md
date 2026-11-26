@@ -219,6 +219,21 @@ uv run --project tools/transcriber transcriber pair --api-url <url> --vault ~/de
 - A trava `deploy/.lock` precisa existir (o primeiro deploy a cria) e ser legível pelo usuário SSH.
 - Uma troca interrompida no meio (SSH caído, timeout) devolve juntos o `index.yml` anterior e o link anterior. Um `.index.sqlite.next` que sobrou de uma execução morta é substituído na próxima troca.
 
+### 7c. 👤 DONO — o mesmo Mac atende a produção (KBC-188)
+
+O que é enviado na produção (documentos, links, gravações, faixas) é feito por um Mac pareado com ela. O mesmo Mac atende o app local e a produção: cada um é um **perfil**, com endereço, token (Keychain) e serviço próprios. O cofre é um só, sob a mesma trava.
+
+1. Na produção, em Configurações → Transcritores, pareie um transcritor marcado **Publica no acervo** e copie o token (aparece uma vez).
+2. No Mac, cole o token quando pedir (ele vai para o Keychain, nunca para um arquivo):
+
+```bash
+uv run --project tools/transcriber transcriber --profile producao pair --api-url https://<domínio> --vault ~/dev/personal/hermetismo --sync-host nova-alexandria
+```
+
+- O serviço da produção (`br.com.nova-alexandria.transcriber.producao`) liga sozinho a cada 5 min, pega o que houver e desliga; o do app local continua ligando quando a API local o chama.
+- `transcriber --profile producao service status` diz o estado; o log é `~/Library/Logs/nova-alexandria-transcriber/service-producao.log`.
+- A sincronização com a produção (7b) fica com o perfil da produção.
+
 ## 8. Primeiro deploy
 
 O deploy é o merge de `develop` em `main` (**decisão do dono**), ou *Actions → Deploy → Run workflow* em `main`.

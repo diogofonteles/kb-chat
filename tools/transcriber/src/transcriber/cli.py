@@ -12,6 +12,7 @@ import sys
 import threading
 from pathlib import Path
 
+from .config import PROFILE_ENV, of_profile
 from .secret import CachedToken, TokenError, load_token, save_keychain
 
 CONFIG_FILE = (
@@ -26,9 +27,14 @@ SYNC_STATE_FILE = CONFIG_FILE.parent / "vault-sync.json"
 SYNC_SCRIPT = Path(__file__).resolve().parents[4] / "deploy" / "scripts" / "sync-vault.sh"
 
 
+def profiled(path: Path) -> Path:
+    """The file of the app this run serves: `config.json`, or `config-<profile>.json`."""
+    return path.with_name(f"{of_profile(path.stem)}{path.suffix}")
+
+
 def load_config(path: Path | None = None) -> dict:
     """The paired config; `path` defaults to CONFIG_FILE as it is at the call (tests move it)."""
-    path = path or CONFIG_FILE
+    path = path or profiled(CONFIG_FILE)
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -36,7 +42,7 @@ def load_config(path: Path | None = None) -> dict:
 
 
 def save_config(config: dict, path: Path | None = None) -> None:
-    path = path or CONFIG_FILE
+    path = path or profiled(CONFIG_FILE)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
     path.chmod(0o600)
@@ -217,7 +223,7 @@ def docs_of(publisher, env: dict | None = None):
 
 def vault_sync_of(args: argparse.Namespace, config: dict, kb, state_file: Path | None = None):
     """The automatic sync with production (KBC-100 FR-4): only with kb and a host to send to."""
-    state_file = state_file or SYNC_STATE_FILE
+    state_file = state_file or profiled(SYNC_STATE_FILE)
     from .vault_sync import VaultSync
 
     host = args.sync_host or os.environ.get("KB_CHAT_SYNC_HOST") or config.get("sync_host")
@@ -244,12 +250,12 @@ def service(args: argparse.Namespace) -> int:
     agent = service_of()
     try:
         if args.action == "install":
-            config = load_config(CONFIG_FILE)
+            config = load_config()
             vault = args.vault or os.environ.get("KB_CHAT_VAULT") or config.get("vault_path")
             if vault:
                 vault = str(Path(vault).expanduser())
             if args.vault:
-                save_config({**config, "vault_path": vault}, CONFIG_FILE)
+                save_config({**config, "vault_path": vault})
             extras = args.extra if args.extra is not None else list(DEFAULT_EXTRAS)
             path = agent.install(vault=vault, extras=extras, load=not args.no_load)
             print(f"Serviço instalado: {path}")
@@ -381,6 +387,10 @@ def _mlx():
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="transcriber", description=__doc__)
+    parser.add_argument(
+        "--profile",
+        help="another app this Mac serves, with its own token and service (KBC-188): producao",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     pairing = commands.add_parser("pair", help="store the token shown on the Transcritores screen")
     pairing.add_argument("--api-url", required=True)
@@ -458,6 +468,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     secrets.set_defaults(handler=keys)
     args = parser.parse_args(argv)
+    if args.profile:
+        # Read by every part that names a file, a Keychain account or a LaunchAgent.
+        os.environ[PROFILE_ENV] = args.profile
+    try:
+        of_profile("")
+    except ValueError as err:
+        print(str(err), file=sys.stderr)
+        return 2
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     return args.handler(args)
 

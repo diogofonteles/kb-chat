@@ -5,7 +5,8 @@
 and loads it with `launchctl bootstrap`. The owner wants it on only when needed: launchd runs
 `transcriber run --exit-when-idle` once at login (RunAtLoad), never keeps it alive; it drains
 the queue and exits, and the API on the same Mac starts it again (`launchctl kickstart`) when a
-job waits. Its log is under
+job waits. Another app it serves (production, KBC-188: `--profile`) has its own agent, which
+launchd starts every few minutes, since that API cannot. Its log is under
 `~/Library/Logs/nova-alexandria-transcriber/`. The plist carries the vault (`KB_CHAT_VAULT`)
 and a PATH that finds uv, kb and ffmpeg; never the token, which stays in the Keychain.
 launchctl is reached through `Launchctl`, so tests use a fake one.
@@ -21,9 +22,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from .config import PROFILE_ENV, of_profile, profile
+
 # The label the owner's Mac already runs (installed by hand on 2026-11-09): installing again
 # updates that agent, never a second one.
 LABEL = "br.com.nova-alexandria.transcriber"
+# Where the API that is served cannot start it (production, KBC-188), launchd starts it this
+# often; with nothing to do it exits within seconds.
+WAKE_EVERY_S = 5 * 60
 # The label of the template before KBC-114: an agent left under it is taken out on install.
 LEGACY_LABELS = ("com.nova-alexandria.transcriber",)
 LOG_FOLDER = "nova-alexandria-transcriber"
@@ -70,12 +76,18 @@ class Service:
     sleep: Callable[[float], None] = field(default=time.sleep)
 
     @property
+    def label(self) -> str:
+        """The first app's label, or the label of another one (`<label>.<profile>`)."""
+        return of_profile(LABEL, sep=".")
+
+    @property
     def plist_path(self) -> Path:
-        return self.home / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+        return self.home / "Library" / "LaunchAgents" / f"{self.label}.plist"
 
     @property
     def log_path(self) -> Path:
-        return self.home / "Library" / "Logs" / LOG_FOLDER / LOG_FILE
+        name = Path(LOG_FILE)
+        return self.home / "Library" / "Logs" / LOG_FOLDER / f"{of_profile(name.stem)}{name.suffix}"
 
     @property
     def domain(self) -> str:
@@ -83,7 +95,7 @@ class Service:
 
     @property
     def target(self) -> str:
-        return f"{self.domain}/{LABEL}"
+        return f"{self.domain}/{self.label}"
 
     def path_env(self) -> str:
         """The folders of uv, kb and ffmpeg first, then the usual ones, each once."""
@@ -101,9 +113,15 @@ class Service:
         env = {"PATH": self.path_env(), "HOME": str(self.home)}
         if vault:
             env["KB_CHAT_VAULT"] = vault
+        another = profile()
+        if another:
+            env[PROFILE_ENV] = another
         log = str(self.log_path)
+        # The first app's API on this Mac starts it when a job waits; any other cannot.
+        wake = {"StartInterval": WAKE_EVERY_S} if another else {}
         return {
-            "Label": LABEL,
+            **wake,
+            "Label": self.label,
             "ProgramArguments": [*program, "transcriber", "run", "--exit-when-idle"],
             "WorkingDirectory": str(self.repo),
             "EnvironmentVariables": env,
@@ -122,6 +140,8 @@ class Service:
 
     def drop_legacy(self) -> None:
         """An agent under an older label would run a second worker: stopped and removed."""
+        if profile():
+            return
         for label in LEGACY_LABELS:
             old = self.plist_path.with_name(f"{label}.plist")
             if old.exists():
