@@ -48,4 +48,7 @@ def test_the_guard_watches_the_agent_plist_and_the_sync_state_too():
         "config.json",
         "vault-sync.json",
         "br.com.nova-alexandria.transcriber.plist",
+        "config-producao.json",
+        "vault-sync-producao.json",
+        "br.com.nova-alexandria.transcriber.producao.plist",
     }

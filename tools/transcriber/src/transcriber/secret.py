@@ -7,7 +7,7 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
-from .config import KEYCHAIN_ACCOUNT, KEYCHAIN_SERVICE
+from .config import KEYCHAIN_ACCOUNT, KEYCHAIN_SERVICE, of_profile
 
 
 class TokenError(Exception):
@@ -27,7 +27,13 @@ def read_token_file(path: Path) -> str:
     return token
 
 
-def read_keychain(service: str = KEYCHAIN_SERVICE, account: str = KEYCHAIN_ACCOUNT) -> str:
+def account() -> str:
+    """The Keychain account of the app this run serves (KBC-188)."""
+    return of_profile(KEYCHAIN_ACCOUNT)
+
+
+def read_keychain(service: str = KEYCHAIN_SERVICE, account: str | None = None) -> str:
+    account = account or globals()["account"]()
     done = subprocess.run(
         ["security", "find-generic-password", "-s", service, "-a", account, "-w"],
         capture_output=True,
@@ -45,9 +51,7 @@ def read_keychain(service: str = KEYCHAIN_SERVICE, account: str = KEYCHAIN_ACCOU
 TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{32,200}$")
 
 
-def save_keychain(
-    token: str, service: str = KEYCHAIN_SERVICE, account: str = KEYCHAIN_ACCOUNT
-) -> None:
+def save_keychain(token: str, service: str = KEYCHAIN_SERVICE, account: str | None = None) -> None:
     """Stores the token without a terminal and without putting it in any process's argv.
 
     `security -i` reads its commands from stdin: the token travels in the command line it
@@ -56,6 +60,7 @@ def save_keychain(
     """
     if not TOKEN_PATTERN.match(token):
         raise TokenError("Esse não parece o token mostrado na tela Transcritores.")
+    account = account or globals()["account"]()
     command = f"add-generic-password -U -s {service} -a {account} -w {token}\n"
     done = subprocess.run(
         ["security", "-i"], input=command, capture_output=True, text=True, check=False
