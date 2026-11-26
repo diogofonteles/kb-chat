@@ -228,6 +228,8 @@ def test_a_woken_run_reads_its_own_app_and_is_off_at_once(fake_api, tmp_path, mo
     token.chmod(0o600)
     monkeypatch.setenv("KB_CHAT_TRANSCRIBER_TOKEN_FILE", str(token))
     monkeypatch.setattr(cli, "_mlx", lambda: (FakeModel(), lambda text: 1))
+    # run() installs its own SIGTERM/SIGINT handlers: never for the rest of the suite.
+    monkeypatch.setattr(cli.signal, "signal", lambda *args: None)
     monkeypatch.setattr("transcriber.audio.ffmpeg_bin", lambda: "/usr/bin/true")
     notices = []
     monkeypatch.setattr(cli, "announce_preparing", lambda *args: notices.append(args))
