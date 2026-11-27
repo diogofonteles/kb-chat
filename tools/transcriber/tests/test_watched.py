@@ -26,7 +26,8 @@ def test_cpu_time_as_ps_writes_it():
 
 
 def test_a_step_that_keeps_working_runs_past_the_watch():
-    done = run_watched([sys.executable, "-c", busy(1.5) + "print('done')"], **FAST)
+    # Linux's ps counts CPU in whole seconds: the watch is longer than one of them.
+    done = run_watched([sys.executable, "-c", busy(3.5) + "print('done')"], stall_s=2.0, poll_s=0.1)
     assert done.returncode == 0
     assert done.stdout.strip() == "done"
 
