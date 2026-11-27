@@ -79,11 +79,17 @@ def cpu_seconds(text: str) -> float | None:
     return seconds + whole_days * 86_400
 
 
-def _tree(root: int) -> dict[int, float] | None:
-    """CPU seconds of the root and every live process under it; None when `ps` cannot say."""
+# A process's parent, group, age and CPU, as `ps` lists them.
+Listed = dict[int, tuple[int, int, float, float]]
+# A process born up to this long before the step is still the step's (ps counts whole seconds).
+BORN_SLACK_S: Final = 2.0
+
+
+def _processes() -> Listed | None:
+    """Every live process: pid → (ppid, pgid, age s, CPU s); None when `ps` cannot say."""
     try:
         listed = subprocess.run(
-            [PS, "-A", "-o", "pid=,ppid=,time="],
+            [PS, "-A", "-o", "pid=,ppid=,pgid=,etime=,time="],
             capture_output=True,
             text=True,
             timeout=10,
@@ -93,27 +99,61 @@ def _tree(root: int) -> dict[int, float] | None:
         return None
     if listed.returncode != 0:
         return None
-    children: dict[int, list[int]] = {}
-    spent: dict[int, float] = {}
+    found: Listed = {}
     for line in listed.stdout.splitlines():
         fields = line.split()
-        if len(fields) != 3 or not fields[0].isdigit() or not fields[1].isdigit():
+        if len(fields) != 5 or not all(field.isdigit() for field in fields[:3]):
             continue
-        cpu = cpu_seconds(fields[2])
-        if cpu is None:
+        age, cpu = cpu_seconds(fields[3]), cpu_seconds(fields[4])
+        if age is None or cpu is None:
             continue
-        pid, parent = int(fields[0]), int(fields[1])
-        spent[pid] = cpu
+        found[int(fields[0])] = (int(fields[1]), int(fields[2]), age, cpu)
+    return found
+
+
+def _under(listed: Listed, roots: set[int]) -> dict[int, float]:
+    """The roots and every live process under them, with their CPU seconds."""
+    children: dict[int, list[int]] = {}
+    for pid, (parent, *_rest) in listed.items():
         children.setdefault(parent, []).append(pid)
     found: dict[int, float] = {}
-    waiting = [root]
+    waiting = list(roots)
     while waiting:
         pid = waiting.pop()
-        if pid in found or pid not in spent:
+        if pid in found or pid not in listed:
             continue
-        found[pid] = spent[pid]
+        found[pid] = listed[pid][3]
         waiting.extend(children.get(pid, []))
     return found
+
+
+def _tree(root: int) -> dict[int, float] | None:
+    """CPU seconds of the root and every live process under it; None when `ps` cannot say."""
+    listed = _processes()
+    return None if listed is None else _under(listed, {root})
+
+
+def _ours(listed: Listed) -> set[int]:
+    """The worker and every process above it: never touched, whatever their age."""
+    found: set[int] = set()
+    pid = os.getpid()
+    while pid in listed and pid not in found:
+        found.add(pid)
+        pid = listed[pid][0]
+    return found
+
+
+def _strays(listed: Listed, age_s: float) -> set[int]:
+    """What the step started whose parent is gone: in the worker's group, born during the step,
+    and with its parent outside the group (launchd took it). Never the worker, what is above
+    it, nor anything older than the step."""
+    group = os.getpgrp()
+    members = {pid for pid, (_, pgid, _, _) in listed.items() if pgid == group}
+    return {
+        pid
+        for pid in members - _ours(listed)
+        if listed[pid][0] not in members and listed[pid][2] <= age_s + BORN_SLACK_S
+    }
 
 
 def _worked(before: dict[int, float], now: dict[int, float]) -> bool:
@@ -127,13 +167,17 @@ def _signal(pids: set[int], sig: signal.Signals) -> None:
             os.kill(pid, sig)
 
 
-def _end_tree(root: int) -> None:
-    """Freezes the root and all under it (a frozen process starts none), then kills them all:
-    nothing is left to go on writing."""
+def _end_all(root: int, age_s: float) -> None:
+    """Freezes the root, all under it and what it left behind (a frozen process starts none),
+    again until nothing new turns up, then kills them all: nothing goes on writing."""
     frozen: set[int] = set()
     for _ in range(20):
-        tree = _tree(root)
-        found = set(tree) if tree is not None else {root}
+        listed = _processes()
+        if listed is None:
+            found = {root}
+        else:
+            strays = _strays(listed, age_s)
+            found = set(_under(listed, {root} | strays))
         new = found - frozen
         if not new:
             break
@@ -156,8 +200,10 @@ class _Output:
 
     @staticmethod
     def _read(stream: IO[bytes], chunks: list[bytes]) -> None:
-        with contextlib.suppress(OSError, ValueError):
-            while chunk := os.read(stream.fileno(), 65_536):
+        """Owns its pipe: reads until it closes, then closes it (never closed under it)."""
+        with stream, contextlib.suppress(OSError, ValueError):
+            fd = stream.fileno()
+            while chunk := os.read(fd, 65_536):
                 chunks.append(chunk)
 
     def drain(self, wait_s: float) -> tuple[str, str]:
@@ -184,6 +230,9 @@ def run_watched(
     (`stopped_by`), or, with a `timeout` (downloads only), past it. Raises StepEnded then."""
     name = Path(command[0]).name
     stop = _STOP.get()
+    # A step asked for after the job stopped never starts.
+    if stop is not None and stop():
+        raise StepStopped(f"{name}: stopped with the job")
     process = subprocess.Popen(
         command,
         cwd=cwd,
@@ -199,36 +248,36 @@ def run_watched(
     seen: dict[int, float] = {}
 
     def ended(kind: type[StepEnded], reason: str) -> StepEnded:
-        _end_tree(process.pid)
+        _end_all(process.pid, time.monotonic() - started)
         process.wait()
         return kind(reason, *output.drain(drain_s))
 
-    try:
-        while True:
-            wait = poll_s
-            if timeout is not None:
-                wait = max(0.01, min(poll_s, started + timeout - time.monotonic()))
-            try:
-                process.wait(timeout=wait)
-                break
-            except subprocess.TimeoutExpired:
-                pass
-            now = time.monotonic()
-            if stop is not None and stop():
-                raise ended(StepStopped, f"{name}: stopped with the job")
-            if timeout is not None and now - started > timeout:
-                raise ended(StepEnded, f"{name}: took more than {timeout:.0f} s")
-            tree = _tree(process.pid)
-            # Without ps nothing is known: it is never ended for that.
-            if tree is None or _worked(seen, tree):
-                last_work = now
-            if tree is not None:
-                seen = tree
-            if now - last_work >= stall_s:
-                raise ended(StepEnded, f"{name}: stalled, no work for {stall_s:.0f} s; stopped")
-        stdout, stderr = output.drain(drain_s)
-    finally:
-        for stream in (process.stdout, process.stderr):
-            with contextlib.suppress(OSError):
-                stream.close()
+    while True:
+        wait = poll_s
+        if timeout is not None:
+            wait = max(0.01, min(poll_s, started + timeout - time.monotonic()))
+        try:
+            process.wait(timeout=wait)
+            break
+        except subprocess.TimeoutExpired:
+            pass
+        now = time.monotonic()
+        if stop is not None and stop():
+            raise ended(StepStopped, f"{name}: stopped with the job")
+        if timeout is not None and now - started > timeout:
+            raise ended(StepEnded, f"{name}: took more than {timeout:.0f} s")
+        tree = _tree(process.pid)
+        # Without ps nothing is known: it is never ended for that.
+        if tree is None or _worked(seen, tree):
+            last_work = now
+        if tree is not None:
+            seen = tree
+        if now - last_work >= stall_s:
+            raise ended(StepEnded, f"{name}: stalled, no work for {stall_s:.0f} s; stopped")
+    # What it left behind ends with it: nothing writes the vault after its lock is gone.
+    _end_all(process.pid, time.monotonic() - started)
+    stdout, stderr = output.drain(drain_s)
+    # Killed by a signal to the group (Ctrl-C) while the job stopped: no failure of the step.
+    if process.returncode != 0 and stop is not None and stop():
+        raise StepStopped(f"{name}: stopped with the job", stdout, stderr)
     return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)

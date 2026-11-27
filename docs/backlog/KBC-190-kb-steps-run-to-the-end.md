@@ -1,7 +1,7 @@
 ---
 id: KBC-190
 title: "Um passo do kb que demora termina; só o que travou é interrompido"
-status: in-progress
+status: in-review
 slice: complete-answers
 outcome: uma publicação no acervo que precisa de um passo longo (um `kb link` de mais de 30 min) termina na primeira tentativa, em vez de recomeçar do zero até esgotar as tentativas
 depends_on: [KBC-188]

@@ -1123,3 +1123,12 @@ def test_downloads_keep_their_limit(tmp_path, monkeypatch):
     YtDlp().download("https://youtu.be/x", tmp_path)
     YtDlp().entries("https://www.youtube.com/playlist?list=PLx")
     assert limits == [doc_ingest.RECORDING_TIMEOUT_S, doc_ingest.LIST_TIMEOUT_S]
+
+
+def test_a_stuck_step_says_what_it_did_and_spent():
+    script = 'echo "converted 3 pages"; echo \'{"spentUsd": 0.0123}\'; sleep 30'
+    with pytest.raises(DocIngestFailed) as failed:
+        run_whole(["/bin/sh", "-c", script], None, stall_s=0.5, poll_s=0.1)
+    assert "converted 3 pages" in failed.value.detail
+    assert "stalled" in failed.value.detail
+    assert failed.value.spent == pytest.approx(0.0123)

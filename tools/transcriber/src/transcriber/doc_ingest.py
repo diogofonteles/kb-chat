@@ -259,7 +259,9 @@ def run_whole(
         raise
     except StepEnded as err:
         # Trying again would take as long, or stop again: it ends here, with why.
-        raise DocIngestFailed("conversion-failed", err.output[-2_000:]) from err
+        # What it said and spent before it was ended goes with why (BR-5).
+        output = err.output
+        raise DocIngestFailed("conversion-failed", output, spent=spent_in(output)) from err
 
 
 # What a site answers for a moment, and the waits before asking again.

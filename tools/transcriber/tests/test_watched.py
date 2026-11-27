@@ -1,5 +1,6 @@
 """A long local step runs to its end; only one that stopped working is ended (KBC-190)."""
 
+import contextlib
 import os
 import signal
 import subprocess
@@ -115,8 +116,9 @@ def test_what_it_said_goes_with_why():
     assert "stalled" in lines[-1]
 
 
-def test_one_that_left_the_step_never_holds_it(tmp_path):
-    """A process that left the step (its parent gone) and holds the output: never waited for."""
+def test_one_that_left_the_step_never_holds_it_and_ends_with_it(tmp_path):
+    """A process that left the step (its parent gone) and holds the output: never waited for,
+    and ended with the step (it would write the vault after the lock is gone)."""
     pid_file = tmp_path / "pid"
     script = f"(sleep 30 & echo $! > {pid_file}); sleep 30"
     started = time.monotonic()
@@ -124,6 +126,7 @@ def test_one_that_left_the_step_never_holds_it(tmp_path):
         with pytest.raises(StepEnded, match="stalled"):
             run_watched(["/bin/sh", "-c", script], **FAST)
         assert time.monotonic() - started < 3
+        assert gone(int(pid_file.read_text(encoding="utf-8")))
     finally:
         end(pid_file)
 
@@ -136,8 +139,55 @@ def test_a_finished_step_is_not_held_by_one_that_left(tmp_path):
         done = run_watched(["/bin/sh", "-c", script], **FAST)
         assert done.stdout.strip() == "done"
         assert time.monotonic() - started < 3
+        assert gone(int(pid_file.read_text(encoding="utf-8")))
     finally:
         end(pid_file)
+
+
+def test_what_is_older_than_the_step_is_never_touched(tmp_path):
+    """A process of the worker's group born before the step is not the step's."""
+    pid_file = tmp_path / "pid"
+    subprocess.run(["/bin/sh", "-c", f"(sleep 30 & echo $! > {pid_file})"], check=True)
+    time.sleep(3.5)
+    try:
+        run_watched(["/bin/sh", "-c", "echo done"], **FAST)
+        assert not gone(int(pid_file.read_text(encoding="utf-8")))
+    finally:
+        end(pid_file)
+
+
+def test_what_starts_children_fast_ends_with_all_of_them(tmp_path):
+    """Children born between a look and the freeze are found on the next look."""
+    pids = tmp_path / "pids"
+    script = f"for i in $(seq 300); do sleep 30 & echo $! >> {pids}; done; wait"
+    started = time.monotonic()
+    try:
+        with (
+            stopped_by(lambda: time.monotonic() - started > 0.05),
+            pytest.raises(StepStopped),
+        ):
+            run_watched(["/bin/sh", "-c", script], stall_s=60, poll_s=0.02)
+        left = [int(pid) for pid in pids.read_text(encoding="utf-8").split()]
+        assert left
+        assert all(gone(pid) for pid in left)
+    finally:
+        for pid in pids.read_text(encoding="utf-8").split() if pids.exists() else []:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(int(pid), signal.SIGKILL)
+
+
+def test_a_step_asked_for_after_the_job_stopped_never_starts(tmp_path):
+    mark = tmp_path / "ran"
+    with stopped_by(lambda: True), pytest.raises(StepStopped):
+        run_watched(["/bin/sh", "-c", f"touch {mark}"], **FAST)
+    assert not mark.exists()
+
+
+def test_a_step_killed_by_a_signal_while_the_job_stops_is_no_failure():
+    """Ctrl-C reaches the worker's whole group: the step dies before the watch looks."""
+    calls = iter([False])
+    with stopped_by(lambda: next(calls, True)), pytest.raises(StepStopped):
+        run_watched(["/bin/sh", "-c", "kill -INT $$; sleep 5"], **FAST)
 
 
 def test_its_output_is_whole_however_long_it_waits():
@@ -181,11 +231,12 @@ def test_when_launchd_ends_the_worker_the_step_ends_too(tmp_path):
 def test_a_stopped_job_ends_its_step_with_all_it_started(tmp_path):
     pid_file = tmp_path / "pid"
     script = f"sleep 30 & echo $! > {pid_file}; wait"
-    stop = {"now": False}
     started = time.monotonic()
     try:
-        with stopped_by(lambda: stop["now"]), pytest.raises(StepStopped, match="stopped"):
-            stop["now"] = True
+        with (
+            stopped_by(lambda: time.monotonic() - started > 0.3),
+            pytest.raises(StepStopped, match="stopped"),
+        ):
             run_watched(["/bin/sh", "-c", script], stall_s=60, poll_s=0.1)
         assert time.monotonic() - started < 3
         assert gone(int(pid_file.read_text(encoding="utf-8")))
@@ -198,3 +249,16 @@ def test_the_stop_belongs_to_its_job_only():
         pass
     done = run_watched(["/bin/sh", "-c", "sleep 0.3; echo done"], **FAST)
     assert done.stdout.strip() == "done"
+
+
+def test_a_stray_is_never_the_worker_nor_above_it():
+    """The worker's shell may be as young as the step, with its parent outside the group."""
+    me, group = os.getpid(), os.getpgrp()
+    shell, orphan, old = 9_000_001, 9_000_002, 9_000_003
+    listed = {
+        me: (shell, group, 1.0, 0.5),
+        shell: (1, group, 1.0, 0.1),
+        orphan: (1, group, 0.5, 0.0),
+        old: (1, group, 60.0, 0.0),
+    }
+    assert watched._strays(listed, age_s=0.5) == {orphan}
