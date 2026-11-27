@@ -254,6 +254,8 @@ test('KBC-191: what kb gave up on counts as failed and says why in Portuguese; "
     .getByRole('listitem')
     .filter({ hasText: `(${title})` });
   await expect(mine).toHaveCount(2);
+  // Not "all in the collection" beside what failed (review F2).
+  await expect(section).not.toContainText('Todas as faixas publicadas');
   for (const item of await mine.all()) {
     await expect(item).toContainText(
       'Falhou: o passo kb link ficou 20 min sem trabalhar e foi interrompido',
@@ -274,7 +276,7 @@ test('KBC-191: what kb gave up on counts as failed and says why in Portuguese; "
   await page.goto('/biblioteca');
   const again = await openTranscribers(page);
   await expect(again.section).toContainText(
-    `${title}: 1 na fila · 0 publicadas · 1 falharam`,
+    `${title}: 1 na fila · 0 publicadas · 1 falhou`,
   );
   await owner.dispose();
 });

@@ -7,7 +7,7 @@ import type {
 import type { MediaDocumentStorePort } from '../../ports/media-document-store.js';
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
 import { isKbConfigurationError } from './kb-configuration.js';
-import { reasonOf } from './failure-reason.js';
+import { reasonOf, syncReasonOf } from './failure-reason.js';
 import type { MediaDocumentReconciler } from './reconciler.js';
 
 /** A document is given up on after this many failed runs (BR-5). */
@@ -140,7 +140,8 @@ export class PublicationStatus {
       lastSync: sync
         ? {
             ok: sync.ok,
-            detail: sync.detail,
+            // One line, never the Mac's home folder (KBC-191 review F10).
+            detail: syncReasonOf(sync.detail),
             startedAt: sync.startedAt,
             finishedAt: sync.finishedAt,
           }

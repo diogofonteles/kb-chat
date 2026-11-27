@@ -41,6 +41,16 @@ const tracksWord = (count: number): string =>
     ? $localize`:@@existingTracks.oneTrack:1 faixa`
     : $localize`:@@existingTracks.tracks:${count}:count: faixas`;
 
+const publishedWord = (count: number): string =>
+  count === 1
+    ? $localize`:@@existingTracks.onePublished:1 publicada`
+    : $localize`:@@existingTracks.published:${count}:count: publicadas`;
+
+const failedWord = (count: number): string =>
+  count === 1
+    ? $localize`:@@existingTracks.oneFailed:1 falhou`
+    : $localize`:@@existingTracks.failed:${count}:count: falharam`;
+
 /** "12 faixas aguardando publicação · última publicação 14:32" (T22, Transcritores). */
 const queueText = (queue: PublicationQueue): string => {
   const waiting =
@@ -114,6 +124,12 @@ export class ExistingTracks {
   });
   protected readonly anyQueued = computed(() =>
     this.collections().some((one) => one.queued > 0),
+  );
+  /** Something kb gave up on: "all in the collection" would be false (KBC-191 review F2). */
+  protected readonly anyFailed = computed(
+    () =>
+      this.collections().some((one) => one.failed > 0) ||
+      (this.queue()?.failed.length ?? 0) > 0,
   );
   /** The publishing queue (KBC-100): absent from an older API. */
   protected readonly queue = computed<PublicationQueue | null>(() =>
@@ -206,7 +222,7 @@ export class ExistingTracks {
   }
 
   protected progressOf(collection: TrackDocumentsCollection): string {
-    return $localize`:@@existingTracks.progress:${collection.title}:title:: ${collection.queued}:queued: na fila · ${collection.published}:published: publicadas · ${collection.failed}:failed: falharam`;
+    return $localize`:@@existingTracks.progress:${collection.title}:title:: ${collection.queued}:queued: na fila · ${publishedWord(collection.published)}:published: · ${failedWord(collection.failed)}:failed:`;
   }
 
   protected failedLabelOf(failed: FailedDocument): string {

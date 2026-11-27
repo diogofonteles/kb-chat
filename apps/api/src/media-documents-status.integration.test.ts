@@ -326,6 +326,32 @@ describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)
     });
   });
 
+  it('KBC-191 review F1: a document kb left undecided, with attempts left, is still counted as queued', async () => {
+    const docs = await documentsWorld();
+    const { world, mac } = docs;
+    const { tracks } = await publishedTracks(world);
+    const job = await leaseKb(world.media, mac.token);
+    const result = await kbResult(
+      world.media,
+      { token: mac.token, job },
+      { ok: false },
+    );
+    expect(result.statusCode, result.body).toBe(204);
+    const read = await world.media.owner(
+      'GET',
+      '/api/v1/media/track-documents',
+    );
+    expect(read.statusCode, read.body).toBe(200);
+    const line = read
+      .json<TrackDocumentsOverview>()
+      .collections.find((one) => one.topic === 'hermetismo');
+    expect(line).toMatchObject({
+      queued: tracks.length,
+      published: 0,
+      failed: 0,
+    });
+  });
+
   it('KBC-191 AC-3: a step the Mac ended as stuck says so, not what kb said before it', async () => {
     const docs = await documentsWorld();
     const { world } = docs;
@@ -354,6 +380,33 @@ describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)
       state: 'failed',
       reason,
     });
+  });
+
+  it("KBC-191 review F10: a failed sync reads as sync-vault's last word, without the Mac's home folder", async () => {
+    const docs = await documentsWorld();
+    const { world, mac } = docs;
+    const sent = await asTranscriber(world.media, mac.token, {
+      method: 'POST',
+      url: '/api/v1/media-worker/vault-sync',
+      payload: {
+        ok: false,
+        detail: [
+          'sending incremental file list',
+          'sync-vault: rsync to nova-alexandria failed (exit 23) in /Users/diogo/dev/vault',
+          'rsync error: some files could not be transferred (code 23)',
+        ].join('\n'),
+        startedAt: '2026-11-27T14:00:00.000Z',
+        finishedAt: '2026-11-27T14:00:09.000Z',
+      },
+    });
+    expect(sent.statusCode, sent.body).toBe(204);
+    const read = await world.media.owner(
+      'GET',
+      '/api/v1/media/track-documents',
+    );
+    expect(read.json<TrackDocumentsOverview>().queue?.lastSync?.detail).toBe(
+      'sync-vault: rsync to nova-alexandria failed (exit 23) in ~/dev/vault',
+    );
   });
 
   it('a sync report comes only from a Mac marked "Publica no acervo"', async () => {

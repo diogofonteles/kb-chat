@@ -16,12 +16,15 @@ Como mestre, quero que a tela Transcritores diga quantas faixas falharam e por q
 Em 27/11, depois de 4 tentativas, as 6 gravações do hermetismo apareciam na lista de falhas. Ao mesmo tempo, a linha do acervo dizia "6 na fila · 0 falharam". O motivo de cada uma era o comando cru, com o caminho do Mac do dono: "TimeoutExpired: Command '['/Users/…/kb', 'link', …]' timed out after 1800 seconds". Depois do KBC-190, um passo parado guarda primeiro o que o kb disse e só depois o motivo. A tela, que mostra a primeira linha, mostraria a fala do kb no lugar do motivo.
 
 ## Business rules
-- BR-1: um documento desistido (as tentativas acabaram e ele não foi publicado) conta em "falharam", não em "na fila". É a mesma regra da lista de falhas e do "aguardando publicação".
+- BR-1: um documento desistido (as tentativas acabaram e ele não foi publicado) conta em "falharam", não em "na fila". É a mesma regra da lista de falhas e do "aguardando publicação". Um documento que o kb deixou sem decidir e que ainda tem tentativas continua em "na fila". Com alguma falha, a tela nunca diz "Todas as faixas publicadas já estão no acervo.", e os números concordam ("1 publicada", "1 falhou").
 - BR-2: o motivo de uma falha conhecida sai em português e diz o passo:
   - parado: "o passo kb link ficou 20 min sem trabalhar e foi interrompido";
   - passou do limite: "o passo kb link passou do limite de 30 min".
   Um motivo desconhecido sai como a primeira linha do erro, como hoje.
-- BR-3: nenhum motivo mostra a pasta de usuário do Mac: `/Users/<nome>` e `/home/<nome>` viram `~`.
+- BR-3: nenhum motivo mostra a pasta de usuário do Mac: `/Users/<nome>` e `/home/<nome>` viram `~`. A falha da sincronização com a produção, no mesmo cartão, mostra uma linha só: a última do sync-vault, ou a última da saída.
+- Limites conhecidos, anteriores a este item:
+  - uma remoção desistida aparece na lista de falhas, mas não em "falharam", porque não é uma faixa a publicar;
+  - a lista mostra até 20 falhas.
 
 ## Acceptance criteria
 - AC-1: dado um documento que falhou 4 vezes, quando o mestre abre Transcritores, então a linha do acervo o conta em "falharam" e não em "na fila", e a lista de falhas o mostra.

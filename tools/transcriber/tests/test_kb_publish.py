@@ -658,3 +658,16 @@ def test_the_worker_gives_the_jobs_stop_to_its_steps(fake_api, vault, monkeypatc
     agent.stop.set()
     assert seen[0]() is True
     assert watched._STOP.get() is None
+
+
+def test_a_long_kb_output_keeps_the_steps_name_and_its_end():
+    """KBC-191 review F3: kb's words are cut from the start, never "kb <step>:"."""
+    from transcriber.kb_publish import OUTPUT_CHARS, KbStepFailed
+
+    output = "\n".join(f"linking raw/{n}.md ({n}/3123)" for n in range(3123))
+    output += "\nkb: stalled, no work for 1200 s; stopped"
+    failed = KbStepFailed("link", output)
+    assert failed.output.startswith("kb link: ")
+    assert failed.output.endswith("kb: stalled, no work for 1200 s; stopped")
+    assert len(failed.output) <= OUTPUT_CHARS
+    assert KbStepFailed("link", "short").output == "kb link: short"
