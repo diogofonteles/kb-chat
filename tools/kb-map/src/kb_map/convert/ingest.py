@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-INGEST_TIMEOUT_S = 30 * 60
 OUTPUT_CHARS = 2_000
 
 
@@ -93,7 +92,9 @@ class KbIngestCli:
             env={**os.environ, **self.env},
             capture_output=True,
             text=True,
-            timeout=INGEST_TIMEOUT_S,
+            # No fixed limit (KBC-190): judging and linking a long book takes as long as it
+            # takes. From the app, the transcriber watches the whole tree (uv, kb-map, kb,
+            # qmd) and ends it only when it stops working.
             check=False,
         )
         output = (done.stdout + done.stderr).strip()

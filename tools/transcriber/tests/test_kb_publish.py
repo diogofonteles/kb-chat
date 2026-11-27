@@ -2,6 +2,7 @@
 
 import fcntl
 import json
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -574,3 +575,86 @@ def test_kbc100_a_remove_outside_the_media_folder_is_refused(vault):
     with pytest.raises(UnsafePath):
         KbPublisher(vault, FakeKb(vault)).publish(job)
     assert keep.exists()
+
+
+# ---------- KBC-190: a long kb step runs to its end; a stuck one fails the step ----------
+
+
+def test_kb_steps_have_no_fixed_limit(tmp_path, monkeypatch):
+    from transcriber import kb_publish
+
+    seen = []
+
+    def watched(command, **options):
+        seen.append(options)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(kb_publish, "run_watched", watched)
+    cli = KbCli(tmp_path, "kb", qmd="qmd")
+    assert cli.run("link", "hermetismo", 0.0).ok
+    assert cli.run("index", "hermetismo", 0.0).ok
+    assert len(seen) == 3
+    assert all(options.get("timeout") is None for options in seen)
+
+
+def test_a_kb_step_that_stalls_fails_the_step_with_what_kb_said(tmp_path):
+    kb = tmp_path / "kb"
+    kb.write_text(
+        '#!/bin/sh\necho "linking raw/a.md (1/3123)"\n'
+        'echo "decisions: 2 calls, 0 cache hits, US$ 0.0420"\nsleep 30\n',
+        encoding="utf-8",
+    )
+    kb.chmod(0o755)
+    cli = KbCli(tmp_path, str(kb), stall_s=0.5, poll_s=0.1)
+    run = cli.run("link", "hermetismo", 0.0)
+    assert not run.ok
+    assert "linking raw/a.md (1/3123)" in run.output
+    assert "stalled" in run.output.splitlines()[-1]
+    # What kb spent before it stopped is booked (ADR 0035 §11).
+    assert run.spend_usd == pytest.approx(0.042)
+
+
+def test_a_stopped_job_stops_the_kb_step_and_is_no_failure_of_it(tmp_path):
+    from transcriber.watched import StepStopped, stopped_by
+
+    kb = tmp_path / "kb"
+    kb.write_text("#!/bin/sh\nsleep 30\n", encoding="utf-8")
+    kb.chmod(0o755)
+    cli = KbCli(tmp_path, str(kb), stall_s=60, poll_s=0.1)
+    with stopped_by(lambda: True), pytest.raises(StepStopped):
+        cli.run("link", "hermetismo", 0.0)
+
+
+def test_a_job_stopped_in_a_kb_step_reports_nothing(fake_api, vault, monkeypatch):
+    """A shutdown or a lost lease mid-step: no failure spent, no result; the lease gives it back."""
+    from transcriber.watched import StepStopped
+
+    def stopped(self, step, topic, budget_usd):
+        raise StepStopped("kb: stopped with the job")
+
+    monkeypatch.setattr(FakeKb, "run", stopped)
+    fake_api.jobs[:] = [dict(JOB)]
+    assert worker(fake_api, KbPublisher(vault, FakeKb(vault))).step() == "job"
+    assert fake_api.bodies("fail") == []
+    assert fake_api.bodies("kb-result") == []
+
+
+def test_the_worker_gives_the_jobs_stop_to_its_steps(fake_api, vault, monkeypatch):
+    from transcriber import watched
+
+    seen = []
+    real = FakeKb.run
+
+    def run(self, step, topic, budget_usd):
+        seen.append(watched._STOP.get())
+        return real(self, step, topic, budget_usd)
+
+    monkeypatch.setattr(FakeKb, "run", run)
+    fake_api.jobs[:] = [dict(JOB)]
+    agent = worker(fake_api, KbPublisher(vault, FakeKb(vault)))
+    assert agent.step() == "job"
+    assert seen and seen[0] is not None
+    assert seen[0]() is False
+    agent.stop.set()
+    assert seen[0]() is True
+    assert watched._STOP.get() is None

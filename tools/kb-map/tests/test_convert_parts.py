@@ -283,3 +283,19 @@ def test_kb_ingest_output_is_read_and_the_command_has_no_secret(tmp_path):
         "--budget",
         "0.0500",
     ]
+
+
+def test_kb_ingest_has_no_fixed_limit(tmp_path, monkeypatch):
+    """KBC-190: a long `kb ingest file` runs to its end; the transcriber watches it."""
+    from kb_map.convert import ingest
+
+    seen = []
+
+    def run(command, **options):
+        seen.append(options)
+        written = '{"topic": "t", "filePath": "t/raw/articles/a.md", "triage": "kept"}'
+        return subprocess.CompletedProcess(command, 0, written + "\n", "")
+
+    monkeypatch.setattr(ingest.subprocess, "run", run)
+    KbIngestCli(tmp_path, "kb").ingest_file("t", tmp_path / "a.md", 0.1)
+    assert "timeout" not in seen[0]

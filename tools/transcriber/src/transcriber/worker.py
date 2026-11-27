@@ -52,6 +52,7 @@ from .voiceprint import (
     spans_of,
     window_vectors,
 )
+from .watched import StepStopped, stopped_by
 
 REVOKED = "Token revogado; pareie de novo."
 VAULT_BUSY = "trava do vault ocupada por outra publicação"
@@ -344,7 +345,9 @@ class Worker:
                     "kb-publish": self._kb_publish,
                     "doc-ingest": self._doc_ingest,
                 }.get(job["kind"], self._transcribe)
-                handler(job, Path(work), progress, stop)
+                # A kb, kb-map or download step ends with the job (KBC-190).
+                with stopped_by(stop.is_set):
+                    handler(job, Path(work), progress, stop)
         finally:
             done.set()
             stop.prints.drop()
@@ -386,6 +389,9 @@ class Worker:
             raise RuntimeError("leased a kb-publish job without a vault and kb")
         try:
             result = self.publisher.publish(job)
+        except StepStopped:
+            self._step_stopped(job, stop)
+            return
         except KbStepFailed as err:
             if is_configuration_error(err.output):
                 self._not_configured(job, err)
@@ -411,6 +417,8 @@ class Worker:
             raise RuntimeError("leased a doc-ingest job without kb-map, a vault and kb")
         try:
             done = self._do_ingest(self.publisher, job, work, progress)
+        except StepStopped:
+            self._step_stopped(job, stop)
         except LeaseLost:
             log.warning("job %s: the lease was lost mid-way: dropped", job["id"])
         except DocIngestFailed as err:
@@ -549,6 +557,12 @@ class Worker:
         self.status.unavailable = list(self.unavailable)
         log.info("the kb's AI key is set: publishing again")
         self._report()
+
+    @staticmethod
+    def _step_stopped(job: dict, stop: _JobStop) -> None:
+        """The job stopped mid-step: nothing is reported, the lease gives it back (KBC-190)."""
+        reason = "lease lost" if stop.lease_lost.is_set() else "shutdown"
+        log.warning("job %s stopped (%s) in a step: nothing reported", job["id"], reason)
 
     def _publish_failed(self, job: dict, err: Exception) -> None:
         log.error("job %s: publishing failed: %s", job["id"], err)
