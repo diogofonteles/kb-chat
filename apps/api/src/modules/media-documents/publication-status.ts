@@ -7,10 +7,8 @@ import type {
 import type { MediaDocumentStorePort } from '../../ports/media-document-store.js';
 import type { MediaRecord, MediaStorePort } from '../../ports/media-store.js';
 import { isKbConfigurationError } from './kb-configuration.js';
+import { reasonOf } from './failure-reason.js';
 import type { MediaDocumentReconciler } from './reconciler.js';
-
-/** kb's or the Mac's failure, said in one line under the title (T22). */
-const REASON_CHARS = 200;
 
 /** A document is given up on after this many failed runs (BR-5). */
 export const PUBLICATION_ATTEMPTS = 4;
@@ -52,17 +50,6 @@ export interface PublicationStatusDeps {
   readonly presence: () => PublisherPresence;
   readonly now?: () => Date;
 }
-
-const reasonOf = (error: string | null): string => {
-  const line =
-    (error ?? '')
-      .split('\n')
-      .map((one) => one.trim())
-      .find(Boolean) ?? 'o kb falhou';
-  return line.length > REASON_CHARS
-    ? `${line.slice(0, REASON_CHARS - 1)}…`
-    : line;
-};
 
 /**
  * Where each document stands in the AI research (KBC-100 BR-4, FR-3, FR-6): **Na pesquisa**

@@ -61,6 +61,9 @@ const KB_LEASABLE = `(status = 'queued' OR (status = 'leased' AND lease_until < 
 
 /** A document kb failed on this often waits for a new render (ADR 0035 §10: 4 attempts). */
 const MAX_DOCUMENT_ATTEMPTS = 4;
+/** A document given up on: its attempts spent, and not in the vault as it is now. The same rule
+ * as the queue's "Falhou" list and its "aguardando publicação" count (KBC-191 BR-1). */
+const GIVEN_UP = `(d.attempts >= ? AND (d.published_sha256 IS NULL OR d.published_sha256 <> d.desired_sha256))`;
 
 const HELD = `id = ? AND lease_id = ? AND worker = ? AND status = 'leased'`;
 const heldArgs = (owner: LeaseOwner) =>
@@ -458,13 +461,14 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       .prepare(
         `SELECT
            COALESCE(SUM(d.media_id IS NULL), 0) AS undocumented,
-           COALESCE(SUM(d.state = 'pending'), 0) AS queued,
+           COALESCE(SUM(d.state = 'pending' AND NOT ${GIVEN_UP}), 0) AS queued,
            COALESCE(SUM(d.state = 'published'), 0) AS published,
-           COALESCE(SUM(d.state = 'failed'), 0) AS failed
+           COALESCE(SUM(${GIVEN_UP}), 0) AS failed
          FROM media m LEFT JOIN media_documents d ON d.media_id = m.id
          WHERE m.topic = ? AND ${PUBLISHABLE}`,
       )
-      .get(topic);
+      // What was given up on is under "falharam", never "na fila" (KBC-191 BR-1).
+      .get(MAX_DOCUMENT_ATTEMPTS, MAX_DOCUMENT_ATTEMPTS, topic);
     return {
       undocumented: Number(row?.['undocumented'] ?? 0),
       queued: Number(row?.['queued'] ?? 0),

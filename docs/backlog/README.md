@@ -80,6 +80,7 @@ Ele é atualizado a cada documento que entra e montado localmente, com a assinat
 | [KBC-187](KBC-187-remove-from-collection.md) | Remover um documento do acervo pelo app, e trazer de volta | complete-answers | in-review | KBC-149, KBC-184 |
 | [KBC-189](KBC-189-transcriber-that-wakes-by-itself.md) | Transcritores: o Mac que acorda sozinho aparece como tal, com o comando certo | complete-answers | ready | KBC-188 |
 | [KBC-190](KBC-190-kb-steps-run-to-the-end.md) | Um passo do kb que demora termina; só o que travou é interrompido | complete-answers | in-review | KBC-188 |
+| [KBC-191](KBC-191-publication-failures-on-screen.md) | Transcritores: o que falhou conta como falhou, com o motivo em português | complete-answers | in-progress | KBC-190 |
 
 Decisões assumidas (o dono pode mudar), na análise, §7:
 - D1: a completude vem do mapa, verificado por `kb-map check`;
