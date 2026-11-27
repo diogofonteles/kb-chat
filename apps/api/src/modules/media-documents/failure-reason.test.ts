@@ -147,10 +147,10 @@ describe('Why the sync with production failed, as masters read it (KBC-191 revie
     );
     const ssh = [
       ...progress,
-      'ssh: connect to host 137.131.172.3 port 22: Operation timed out',
+      'ssh: connect to host 203.0.113.10 port 22: Operation timed out',
     ].join('\n');
     expect(syncReasonOf(ssh)).toBe(
-      'ssh: connect to host 137.131.172.3 port 22: Operation timed out',
+      'ssh: connect to host 203.0.113.10 port 22: Operation timed out',
     );
   });
 
