@@ -30,6 +30,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, TextIO
 
+from .watched import POLL_S, STALL_S, StepEnded, StepStopped, run_watched
+
 # index before link gives link its vector neighbours; the last index makes link's keys
 # searchable (spike, item 7).
 STEPS = ("classify", "index", "link", "index")
@@ -38,8 +40,6 @@ BUDGETED = ("classify", "link")
 LOCK_FILE = ".kb-chat-publish.lock"
 # The end of kb's output is what tells why it failed; the API keeps 2,000 characters.
 OUTPUT_CHARS = 2_000
-# A step that hangs must not hold the lock (and the queue) for ever.
-STEP_TIMEOUT_S = 30 * 60
 FACET_KEYS = ("genre", "depth", "relevance", "summary")
 # The frontmatter keys the app's renderer writes (track-document.ts `headerOf`, plus every
 # `kb_chat_*`): on a rewrite they come from the new render; every other key is kb's and stays.
@@ -99,7 +99,10 @@ class KbStepFailed(Exception):
     def __init__(self, step: str, output: str, spent: float = 0.0) -> None:
         self.step = step
         self.spent = spent
-        self.output = f"kb {step}: {output}"[-OUTPUT_CHARS:]
+        # The step's name first and the end of kb's words (why is last): a long output never
+        # cuts "kb <step>:" away (KBC-191 review F3).
+        head = f"kb {step}: "
+        self.output = head + output[-(OUTPUT_CHARS - len(head)) :]
         super().__init__(self.output)
 
 
@@ -213,6 +216,10 @@ class KbCli:
     env: dict[str, str] = field(default_factory=dict, repr=False)
     # QMD's own binary: embeds one collection; without it, kb embeds them all.
     qmd: str | None = None
+    # A step runs as long as it works; one stuck this long ends, so the lock and the queue
+    # are not held for ever (KBC-190: a fixed 30 min made a long `kb link` start over).
+    stall_s: float = STALL_S
+    poll_s: float = POLL_S
     _version: str | None = field(default=None, init=False, repr=False, compare=False)
 
     def command(self, step: str, topic: str, budget_usd: float) -> list[str]:
@@ -278,15 +285,20 @@ class KbCli:
         return {**os.environ, **self.env}
 
     def _run(self, command: list[str]) -> KbRun:
-        done = subprocess.run(
-            command,
-            cwd=self.vault,
-            env=self._env(),
-            capture_output=True,
-            text=True,
-            timeout=STEP_TIMEOUT_S,
-            check=False,
-        )
+        try:
+            done = run_watched(
+                command,
+                cwd=self.vault,
+                env=self._env(),
+                stall_s=self.stall_s,
+                poll_s=self.poll_s,
+            )
+        except StepStopped:
+            # The job stopped (a shutdown, a lost lease): no failure of the step.
+            raise
+        except StepEnded as err:
+            # Stuck: what kb said before (where it was, what it spent) goes with why.
+            return KbRun(ok=False, output=err.output, spend_usd=spend_of(err.output))
         output = (done.stdout + done.stderr).strip()
         spend = spend_of(output)
         return KbRun(ok=done.returncode == 0, output=output, spend_usd=spend)

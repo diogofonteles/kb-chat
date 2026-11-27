@@ -97,8 +97,30 @@ export function registerKbPublishMac(
       return reply.code(200).send({ documents });
     },
   );
+  registerFail(app, kb);
   registerForget(app, input.mediaDir);
   registerFolder(app, input);
+}
+
+/** KBC-191: the Mac failing a job with kb's words, as the queue keeps them. */
+function registerFail(
+  app: FastifyInstance,
+  kb: ReturnType<typeof createMediaDocuments>['kb'],
+): void {
+  app.post(
+    '/api/e2e/kb-publish/fail',
+    { config: { access: PUBLIC } },
+    async (request, reply) => {
+      const { topic, detail } = failBody.parse(request.body);
+      const job = kb.lease(WORKER, topic);
+      if (!job) return reply.code(404).send();
+      kb.fail(
+        { jobId: job.id, worker: WORKER, leaseId: job.leaseId },
+        { detail },
+      );
+      return reply.code(204).send();
+    },
+  );
 }
 
 /**
@@ -126,6 +148,10 @@ function registerFolder(
 }
 
 const topicBody = z.object({ topic: z.string().min(1) });
+const failBody = z.object({
+  topic: z.string().min(1),
+  detail: z.string().min(1).max(2_000),
+});
 
 /**
  * A collection as a database from before KBC-099 left it: its published tracks with no

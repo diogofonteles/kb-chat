@@ -3,6 +3,7 @@ itself and hands them to kb only. Fakes stand for `security`; the isolation guar
 
 import argparse
 import logging
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -160,16 +161,11 @@ def test_kbs_configuration_errors_are_told_apart_from_its_failures():
 def test_the_kb_subprocess_gets_the_keys_and_the_worker_process_does_not(tmp_path, monkeypatch):
     seen: dict = {}
 
-    class Done:
-        returncode = 0
-        stdout = "ok"
-        stderr = ""
-
     def fake_run(args, **kwargs):
         seen["env"] = kwargs.get("env")
-        return Done()
+        return subprocess.CompletedProcess(args, 0, "ok", "")
 
-    monkeypatch.setattr("transcriber.kb_publish.subprocess.run", fake_run)
+    monkeypatch.setattr("transcriber.kb_publish.run_watched", fake_run)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     KbCli(tmp_path, "/bin/kb", env={"OPENROUTER_API_KEY": KEY}).run("classify", "t", 0.1)
     assert seen["env"]["OPENROUTER_API_KEY"] == KEY

@@ -19,6 +19,10 @@ REAL_FILES = (
     REAL_CONFIG,
     _REAL_SUPPORT / "vault-sync.json",
     _REAL_HOME / "Library" / "LaunchAgents" / "br.com.nova-alexandria.transcriber.plist",
+    # The app paired as production beside the first one (KBC-188).
+    _REAL_SUPPORT / "config-producao.json",
+    _REAL_SUPPORT / "vault-sync-producao.json",
+    _REAL_HOME / "Library" / "LaunchAgents" / "br.com.nova-alexandria.transcriber.producao.plist",
 )
 _REAL_POPEN = subprocess.Popen
 _FORBIDDEN = ("security", "launchctl")

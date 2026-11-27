@@ -95,7 +95,7 @@
       </div>
     }
     @if (offered().length === 0) {
-      @if (!anyQueued()) {
+      @if (!anyQueued() && !anyFailed()) {
         <p class="hint" i18n="@@existingTracks.allIn">
           Todas as faixas publicadas já estão no acervo.
         </p>

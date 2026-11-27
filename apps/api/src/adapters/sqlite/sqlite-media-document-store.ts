@@ -61,6 +61,9 @@ const KB_LEASABLE = `(status = 'queued' OR (status = 'leased' AND lease_until < 
 
 /** A document kb failed on this often waits for a new render (ADR 0035 §10: 4 attempts). */
 const MAX_DOCUMENT_ATTEMPTS = 4;
+/** A document given up on: its attempts spent, and not in the vault as it is now. The same rule
+ * as the queue's "Falhou" list and its "aguardando publicação" count (KBC-191 BR-1). */
+const GIVEN_UP = `(d.attempts >= ? AND (d.published_sha256 IS NULL OR d.published_sha256 <> d.desired_sha256))`;
 
 const HELD = `id = ? AND lease_id = ? AND worker = ? AND status = 'leased'`;
 const heldArgs = (owner: LeaseOwner) =>
@@ -458,13 +461,15 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
       .prepare(
         `SELECT
            COALESCE(SUM(d.media_id IS NULL), 0) AS undocumented,
-           COALESCE(SUM(d.state = 'pending'), 0) AS queued,
+           COALESCE(SUM(d.state <> 'published' AND NOT ${GIVEN_UP}), 0) AS queued,
            COALESCE(SUM(d.state = 'published'), 0) AS published,
-           COALESCE(SUM(d.state = 'failed'), 0) AS failed
+           COALESCE(SUM(${GIVEN_UP}), 0) AS failed
          FROM media m LEFT JOIN media_documents d ON d.media_id = m.id
          WHERE m.topic = ? AND ${PUBLISHABLE}`,
       )
-      .get(topic);
+      // What was given up on is under "falharam", never "na fila"; a document kb left
+      // undecided with attempts left ('failed' state) is still "na fila" (KBC-191 BR-1).
+      .get(MAX_DOCUMENT_ATTEMPTS, MAX_DOCUMENT_ATTEMPTS, topic);
     return {
       undocumented: Number(row?.['undocumented'] ?? 0),
       queued: Number(row?.['queued'] ?? 0),
@@ -663,7 +668,8 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
         .get(...heldArgs(owner));
       if (!row) return null;
       const topic = String(row['topic']);
-      const error = input.error.slice(0, 2_000);
+      // The end: the Mac puts why last (KBC-191 review F14).
+      const error = input.error.slice(-2_000);
       const delivered = deliveredSchema.parse(
         JSON.parse(String(row['items'] ?? '[]')),
       );
@@ -801,7 +807,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
              updated_at = ? WHERE topic = ? AND path = ?`,
         )
         .run(
-          (outcome.error ?? 'kb failed').slice(0, 2_000),
+          (outcome.error ?? 'kb failed').slice(-2_000),
           now.toISOString(),
           topic,
           item.path,
@@ -838,7 +844,7 @@ export class SqliteMediaDocumentStore implements MediaDocumentStorePort {
           `UPDATE media_documents SET state = 'failed', last_error = ?,
              attempts = attempts + 1, updated_at = ? WHERE media_id = ?`,
         )
-        .run((outcome.error ?? 'kb failed').slice(0, 2_000), at, item.mediaId);
+        .run((outcome.error ?? 'kb failed').slice(-2_000), at, item.mediaId);
   }
 
   private close(

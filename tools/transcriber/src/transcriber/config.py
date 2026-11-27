@@ -4,6 +4,8 @@ Change a value here and bump PARAMETERS_VERSION: the API stores both with every 
 so a later re-transcription knows which set produced each version.
 """
 
+import os
+import re
 from typing import Final
 
 PARAMETERS_VERSION: Final = "2026-10-28.1"
@@ -54,6 +56,28 @@ ERROR_BACKOFF_S: Final = 60.0
 
 KEYCHAIN_SERVICE: Final = "nova-alexandria-transcriber"
 KEYCHAIN_ACCOUNT: Final = "transcriber"
+
+# Another app this Mac serves besides the one it was first paired with (KBC-188): production
+# beside the local one. Each has its address, its token and its LaunchAgent; the vault is one.
+PROFILE_ENV: Final = "KB_CHAT_TRANSCRIBER_PROFILE"
+PROFILE_NAME: Final = re.compile(r"[a-z0-9][a-z0-9-]{0,29}")
+
+
+def profile() -> str | None:
+    """The app this run serves: None for the first one (as it always was)."""
+    name = os.environ.get(PROFILE_ENV, "").strip()
+    if not name:
+        return None
+    if not PROFILE_NAME.fullmatch(name):
+        raise ValueError(f"{PROFILE_ENV} must be lowercase letters, digits and '-': {name!r}")
+    return name
+
+
+def of_profile(name: str, sep: str = "-") -> str:
+    """`name`, or `name-<profile>` for another app."""
+    current = profile()
+    return name if current is None else f"{name}{sep}{current}"
+
 
 # Voice separation (KBC-064, ADR 0029 §1). Bump DIARIZE_PARAMETERS_VERSION with any change:
 # the API stores both with every separation, next to its raw turns.
