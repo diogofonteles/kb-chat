@@ -30,7 +30,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol, TextIO
 
-from .watched import POLL_S, STALL_S, StepEnded, run_watched
+from .watched import POLL_S, STALL_S, StepEnded, StepStopped, run_watched
 
 # index before link gives link its vector neighbours; the last index makes link's keys
 # searchable (spike, item 7).
@@ -290,8 +290,12 @@ class KbCli:
                 stall_s=self.stall_s,
                 poll_s=self.poll_s,
             )
+        except StepStopped:
+            # The job stopped (a shutdown, a lost lease): no failure of the step.
+            raise
         except StepEnded as err:
-            return KbRun(ok=False, output=str(err), spend_usd=0.0)
+            # Stuck: what kb said before (where it was, what it spent) goes with why.
+            return KbRun(ok=False, output=err.output, spend_usd=spend_of(err.output))
         output = (done.stdout + done.stderr).strip()
         spend = spend_of(output)
         return KbRun(ok=done.returncode == 0, output=output, spend_usd=spend)

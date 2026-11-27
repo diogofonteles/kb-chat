@@ -1084,3 +1084,42 @@ def test_a_stuck_step_ends_with_all_it_started_and_says_why():
     with pytest.raises(DocIngestFailed, match="stalled"):
         run_whole(["/bin/sh", "-c", "sleep 30"], None, stall_s=0.5, poll_s=0.1)
     assert time.monotonic() - started < 3
+
+
+def test_a_stopped_job_ends_the_step_and_is_no_failure_of_it():
+    from transcriber.watched import StepStopped, stopped_by
+
+    with stopped_by(lambda: True), pytest.raises(StepStopped):
+        run_whole(["/bin/sh", "-c", "sleep 30"], None, poll_s=0.1)
+
+
+def test_a_job_stopped_in_a_step_reports_nothing(fake_api, vault):
+    from transcriber.watched import StepStopped
+
+    class Stopping(FakeKbMap):
+        def convert(self, *args, **kwargs):
+            raise StepStopped("uv: stopped with the job")
+
+    fake_api.jobs[:] = [dict(FILE_JOB)]
+    assert worker(fake_api, vault, kb_map=Stopping(vault)).step() == "job"
+    assert fake_api.bodies("fail") == []
+    assert fake_api.bodies("doc-result") == []
+
+
+def test_downloads_keep_their_limit(tmp_path, monkeypatch):
+    from transcriber import doc_ingest
+
+    limits = []
+
+    def run(command, timeout, cwd=None, env=None):
+        limits.append(timeout)
+        if "-J" in command:
+            return subprocess.CompletedProcess(command, 0, '{"entries": []}', "")
+        template = Path(command[command.index("-o") + 1])
+        (template.parent / "Aula [x].m4a").write_bytes(b"m4a")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(doc_ingest, "run_whole", run)
+    YtDlp().download("https://youtu.be/x", tmp_path)
+    YtDlp().entries("https://www.youtube.com/playlist?list=PLx")
+    assert limits == [doc_ingest.RECORDING_TIMEOUT_S, doc_ingest.LIST_TIMEOUT_S]

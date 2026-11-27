@@ -27,7 +27,7 @@ from urllib.parse import urlsplit
 from .kb_publish import KbPublisher, KbStepFailed, taken_out_by_person
 from .known_links import is_short, known_address
 from .recording_file import NotARecording, TooLarge, fetch_file, led_to
-from .watched import StepEnded, run_watched
+from .watched import StepEnded, StepStopped, run_watched
 
 # kb-map's project, next to this one in the repository (tools/kb-map).
 KB_MAP_PROJECT = Path(__file__).resolve().parents[3] / "kb-map"
@@ -254,9 +254,12 @@ def run_whole(
     would leave the others writing the vault), and the job fails with why."""
     try:
         return run_watched(command, timeout=timeout, cwd=cwd, env=env, **watch)
+    except StepStopped:
+        # The job stopped (a shutdown, a lost lease): no failure of the job.
+        raise
     except StepEnded as err:
         # Trying again would take as long, or stop again: it ends here, with why.
-        raise DocIngestFailed("conversion-failed", str(err)) from err
+        raise DocIngestFailed("conversion-failed", err.output[-2_000:]) from err
 
 
 # What a site answers for a moment, and the waits before asking again.
