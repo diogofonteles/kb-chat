@@ -2,6 +2,7 @@
 
 import fcntl
 import json
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -574,3 +575,33 @@ def test_kbc100_a_remove_outside_the_media_folder_is_refused(vault):
     with pytest.raises(UnsafePath):
         KbPublisher(vault, FakeKb(vault)).publish(job)
     assert keep.exists()
+
+
+# ---------- KBC-190: a long kb step runs to its end; a stuck one fails the step ----------
+
+
+def test_kb_steps_have_no_fixed_limit(tmp_path, monkeypatch):
+    from transcriber import kb_publish
+
+    seen = []
+
+    def watched(command, **options):
+        seen.append(options)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(kb_publish, "run_watched", watched)
+    cli = KbCli(tmp_path, "kb", qmd="qmd")
+    assert cli.run("link", "hermetismo", 0.0).ok
+    assert cli.run("index", "hermetismo", 0.0).ok
+    assert len(seen) == 3
+    assert all(options.get("timeout") is None for options in seen)
+
+
+def test_a_kb_step_that_stalls_fails_the_step(tmp_path):
+    kb = tmp_path / "kb"
+    kb.write_text("#!/bin/sh\nsleep 30\n", encoding="utf-8")
+    kb.chmod(0o755)
+    cli = KbCli(tmp_path, str(kb), stall_s=0.5, poll_s=0.1)
+    run = cli.run("link", "hermetismo", 0.0)
+    assert not run.ok
+    assert "stalled" in run.output

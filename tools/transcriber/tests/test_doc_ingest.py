@@ -1058,3 +1058,29 @@ def test_a_ledger_cut_in_a_character_is_read_all_the_same(fake_api, vault):
 
     apart = "raw/_quarantine/articles/o-caibalion.md"
     assert taken_out_by_person(vault / "hermetismo", apart)
+
+
+# ---------- KBC-190: conversion and the map run to their end; a stuck step ends ----------
+
+
+def test_conversion_and_the_map_have_no_fixed_limit(tmp_path, monkeypatch):
+    from transcriber import doc_ingest
+
+    limits = []
+
+    def fake(command, timeout, cwd=None, env=None):
+        limits.append(timeout)
+        return subprocess.CompletedProcess(command, 0, '{"state": "failed"}\n', "")
+
+    monkeypatch.setattr(doc_ingest, "run_whole", fake)
+    cli = doc_ingest.KbMapCli(tmp_path)
+    cli.convert("t", "/x", name="a.pdf", source_path="upload/x", budget_usd=0.1, upload_id="u")
+    cli.map_document("t", "raw/a.md", 0.1)
+    assert limits == [None, None]
+
+
+def test_a_stuck_step_ends_with_all_it_started_and_says_why():
+    started = time.monotonic()
+    with pytest.raises(DocIngestFailed, match="stalled"):
+        run_whole(["/bin/sh", "-c", "sleep 30"], None, stall_s=0.5, poll_s=0.1)
+    assert time.monotonic() - started < 3

@@ -12,13 +12,11 @@ recording link. Under the same vault lock as kb-publish:
 kb-map, kb and yt-dlp are reached through ports, so tests run none of them.
 """
 
-import contextlib
 import json
 import logging
 import os
 import re
 import shutil
-import signal
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -29,11 +27,11 @@ from urllib.parse import urlsplit
 from .kb_publish import KbPublisher, KbStepFailed, taken_out_by_person
 from .known_links import is_short, known_address
 from .recording_file import NotARecording, TooLarge, fetch_file, led_to
+from .watched import StepEnded, run_watched
 
 # kb-map's project, next to this one in the repository (tools/kb-map).
 KB_MAP_PROJECT = Path(__file__).resolve().parents[3] / "kb-map"
-CONVERT_TIMEOUT_S = 60 * 60
-MAP_TIMEOUT_S = 30 * 60
+# Conversion and the map run as long as they work (KBC-190); downloads keep a limit.
 RECORDING_TIMEOUT_S = 60 * 60
 LIST_TIMEOUT_S = 5 * 60
 # The most of a channel or playlist the app offers (RECORDING_LIST_MAX in the contracts).
@@ -192,7 +190,7 @@ class KbMapCli:
             *args,
         ]
 
-    def _run(self, command: list[str], timeout: float) -> subprocess.CompletedProcess:
+    def _run(self, command: list[str], timeout: float | None) -> subprocess.CompletedProcess:
         return run_whole(command, timeout, cwd=self.vault, env={**os.environ, **self.env})
 
     def convert(
@@ -211,7 +209,7 @@ class KbMapCli:
         if name:
             # With "=": a name that starts with "-" is a name, not an option.
             args.append(f"--name={name}")
-        done = self._run(self._command(*args), CONVERT_TIMEOUT_S)
+        done = self._run(self._command(*args), None)
         lines = [line for line in done.stdout.splitlines() if line.startswith("{")]
         if not lines:
             output = (done.stdout + done.stderr).strip()
@@ -223,7 +221,7 @@ class KbMapCli:
 
     def map_document(self, topic: str, doc_id: str, budget_usd: float) -> float:
         args = ["sections", topic, "--doc", doc_id, "--max-usd", f"{budget_usd:.4f}"]
-        done = self._run(self._command(*args), MAP_TIMEOUT_S)
+        done = self._run(self._command(*args), None)
         spent = spent_in(done.stdout)
         if done.returncode != 0:
             output = (done.stdout + done.stderr).strip()
@@ -246,33 +244,19 @@ def spent_in(output: str) -> float:
 
 def run_whole(
     command: list[str],
-    timeout: float,
+    timeout: float | None,
     cwd: Path | None = None,
     env: dict[str, str] | None = None,
+    **watch: float,
 ) -> subprocess.CompletedProcess:
-    """Runs a command in a group of its own; past the time, the whole group ends (uv starts
-    kb-map, which starts kb: ending uv alone would leave the others writing the vault)."""
-    with subprocess.Popen(
-        command,
-        cwd=cwd,
-        env=env,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
-    ) as process:
-        try:
-            stdout, stderr = process.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired as err:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
-            process.communicate()
-            # Trying again would take as long: it ends here, with why.
-            raise DocIngestFailed(
-                "conversion-failed", f"{Path(command[0]).name}: took more than {timeout:.0f} s"
-            ) from err
-    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    """Runs a command in a group of its own, watched (KBC-190): stuck, or past `timeout` (a
+    download's limit), the whole group ends (uv starts kb-map, which starts kb: ending uv alone
+    would leave the others writing the vault), and the job fails with why."""
+    try:
+        return run_watched(command, timeout=timeout, cwd=cwd, env=env, **watch)
+    except StepEnded as err:
+        # Trying again would take as long, or stop again: it ends here, with why.
+        raise DocIngestFailed("conversion-failed", str(err)) from err
 
 
 # What a site answers for a moment, and the waits before asking again.
