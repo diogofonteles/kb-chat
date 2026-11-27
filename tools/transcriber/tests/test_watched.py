@@ -22,11 +22,16 @@ def busy(seconds: float) -> str:
 
 
 def gone(pid: int) -> bool:
+    """Ended: no such process, or a zombie waiting for its new parent (Linux's init) to reap
+    it. A killed child whose parent died with it is one there for a while."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return True
-    return False
+    state = subprocess.run(
+        ["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True, check=False
+    )
+    return state.stdout.strip().startswith("Z") or state.returncode != 0
 
 
 def end(pid_file: Path) -> None:
