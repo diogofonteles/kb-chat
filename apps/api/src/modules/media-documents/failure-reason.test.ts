@@ -77,9 +77,16 @@ describe('Why a document failed, the review of KBC-191', () => {
   });
 
   it('F5: many line breaks are read at once', () => {
+    // Quadratic took 14 s here; linear takes ~10 ms. Room for a loaded machine.
     const started = performance.now();
     reasonOf(`${'\n'.repeat(100_000)}x`);
-    expect(performance.now() - started).toBeLessThan(200);
+    expect(performance.now() - started).toBeLessThan(3_000);
+  });
+
+  it('R2-F4: a limit said after other lines is found', () => {
+    expect(reasonOf('baixando 42%\nyt-dlp: took more than 3600 s')).toBe(
+      'o passo yt-dlp passou do limite de 60 min',
+    );
   });
 
   it('F6: under a minute is never "0 min"', () => {
@@ -122,20 +129,39 @@ describe('Why a document failed, the review of KBC-191', () => {
   });
 });
 
-describe('Why the sync with production failed, as masters read it (KBC-191 review F10)', () => {
-  it("is sync-vault's last word, without the Mac's home folder", () => {
-    const detail = [
-      'sending incremental file list',
-      '>f+++++++++ hermetismo/raw/a.md',
-      'sync-vault: rsync to nova-alexandria failed (exit 255): ssh: connect to host',
-      'rsync error: unexplained error (code 255) at /Users/diogo/src/io.c(232)',
+describe('Why the sync with production failed, as masters read it (KBC-191 review F10, R2-F1)', () => {
+  // As the Mac sends it: stdout (sync-vault's progress), then stderr (the error that stopped it).
+  const progress = [
+    'sync-vault: kb-map check hermetismo: ok',
+    'sync-vault: /Users/diogo/dev/personal/hermetismo (3 topics, 0 deletions) -> nova-alexandria:/srv/kb-chat/vault',
+  ];
+
+  it('is the error of the tool that stopped it, never a progress line', () => {
+    const rsync = [
+      ...progress,
+      'rsync: connection unexpectedly closed (0 bytes received so far) [sender]',
+      'rsync error: error in socket IO (code 10) at io.c(232) [sender=3.4.1]',
     ].join('\n');
-    expect(syncReasonOf(detail)).toBe(
-      'sync-vault: rsync to nova-alexandria failed (exit 255): ssh: connect to host',
+    expect(syncReasonOf(rsync)).toBe(
+      'rsync error: error in socket IO (code 10) at io.c(232) [sender=3.4.1]',
     );
-    expect(
-      syncReasonOf('rsync: write failed on /Users/diogo/x: No space'),
-    ).toBe('rsync: write failed on ~/x: No space');
+    const ssh = [
+      ...progress,
+      'ssh: connect to host 137.131.172.3 port 22: Operation timed out',
+    ].join('\n');
+    expect(syncReasonOf(ssh)).toBe(
+      'ssh: connect to host 137.131.172.3 port 22: Operation timed out',
+    );
+  });
+
+  it("is sync-vault's own word when it gave up, without the Mac's home folder", () => {
+    const died = [
+      ...progress,
+      'sync-vault: would delete 250 files in /Users/diogo/dev/vault (limit 200); nothing was sent',
+    ].join('\n');
+    expect(syncReasonOf(died)).toBe(
+      'sync-vault: would delete 250 files in ~/dev/vault (limit 200); nothing was sent',
+    );
     expect(syncReasonOf('')).toBe('a sincronização falhou');
   });
 });

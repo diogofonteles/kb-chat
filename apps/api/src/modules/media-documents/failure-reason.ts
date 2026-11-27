@@ -21,7 +21,6 @@ const KB_STEP = /^\s*kb ([a-z][\w-]*(?: [a-z][\w-]*)*):/;
 /** A home folder of the Mac (macOS) or of a Linux machine. */
 const HOME = /\/(?:Users|home)\/[^/\s'"]+/g;
 const TOOL = /^[\w.-]+$/;
-const SYNC_LINE = /^sync-vault:/;
 
 /** What the app and the Mac write in English, said as masters read it. */
 const KNOWN: Readonly<Record<string, string>> = {
@@ -79,14 +78,10 @@ export const reasonOf = (error: string | null): string => {
 };
 
 /**
- * Why the Mac's sync with production failed (KBC-191 review F10): sync-vault's own last word
- * when it said one, else the last line of the output (rsync's, ssh's), never the home folder.
+ * Why the Mac's sync with production failed (KBC-191 review F10): the last line of the
+ * output. The Mac sends stdout, then stderr, so it is sync-vault's own `die`, or the error of
+ * rsync, ssh or sqlite3 that stopped it (`set -e`), never a progress line; never the home
+ * folder.
  */
-export const syncReasonOf = (detail: string): string => {
-  const said = lines(detail);
-  const line =
-    said.filter((one) => SYNC_LINE.test(one)).at(-1) ??
-    said.at(-1) ??
-    SYNC_FALLBACK;
-  return cut(masked(line));
-};
+export const syncReasonOf = (detail: string): string =>
+  cut(masked(lines(detail).at(-1) ?? SYNC_FALLBACK));

@@ -21,7 +21,7 @@ Em 27/11, depois de 4 tentativas, as 6 gravações do hermetismo apareciam na li
   - parado: "o passo kb link ficou 20 min sem trabalhar e foi interrompido";
   - passou do limite: "o passo kb link passou do limite de 30 min".
   Um motivo desconhecido sai como a primeira linha do erro, como hoje.
-- BR-3: nenhum motivo mostra a pasta de usuário do Mac: `/Users/<nome>` e `/home/<nome>` viram `~`. A falha da sincronização com a produção, no mesmo cartão, mostra uma linha só: a última do sync-vault, ou a última da saída.
+- BR-3: nenhum motivo mostra a pasta de usuário do Mac: `/Users/<nome>` e `/home/<nome>` viram `~`. A falha da sincronização com a produção, no mesmo cartão, mostra uma linha só, a última da saída: o que parou a sincronização (o próprio sync-vault, ou o erro do rsync, do ssh ou do sqlite3).
 - Limites conhecidos, anteriores a este item:
   - uma remoção desistida aparece na lista de falhas, mas não em "falharam", porque não é uma faixa a publicar;
   - a lista mostra até 20 falhas.

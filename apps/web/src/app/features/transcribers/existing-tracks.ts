@@ -43,13 +43,13 @@ const tracksWord = (count: number): string =>
 
 const publishedWord = (count: number): string =>
   count === 1
-    ? $localize`:@@existingTracks.onePublished:1 publicada`
-    : $localize`:@@existingTracks.published:${count}:count: publicadas`;
+    ? $localize`:@@existingTracks.onePublishedCount:1 publicada`
+    : $localize`:@@existingTracks.publishedCount:${count}:count: publicadas`;
 
 const failedWord = (count: number): string =>
   count === 1
-    ? $localize`:@@existingTracks.oneFailed:1 falhou`
-    : $localize`:@@existingTracks.failed:${count}:count: falharam`;
+    ? $localize`:@@existingTracks.oneFailedCount:1 falhou`
+    : $localize`:@@existingTracks.failedCount:${count}:count: falharam`;
 
 /** "12 faixas aguardando publicação · última publicação 14:32" (T22, Transcritores). */
 const queueText = (queue: PublicationQueue): string => {

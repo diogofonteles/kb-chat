@@ -382,7 +382,7 @@ describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)
     });
   });
 
-  it("KBC-191 review F10: a failed sync reads as sync-vault's last word, without the Mac's home folder", async () => {
+  it("KBC-191 review F10: a failed sync reads as what stopped it, without the Mac's home folder", async () => {
     const docs = await documentsWorld();
     const { world, mac } = docs;
     const sent = await asTranscriber(world.media, mac.token, {
@@ -390,10 +390,10 @@ describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)
       url: '/api/v1/media-worker/vault-sync',
       payload: {
         ok: false,
+        // stdout (sync-vault's progress), then stderr (what stopped it), as the Mac sends it.
         detail: [
-          'sending incremental file list',
-          'sync-vault: rsync to nova-alexandria failed (exit 23) in /Users/diogo/dev/vault',
-          'rsync error: some files could not be transferred (code 23)',
+          'sync-vault: /Users/diogo/dev/vault (3 topics, 0 deletions) -> nova-alexandria:/srv/kb-chat/vault',
+          'rsync: write failed on /Users/diogo/dev/vault/x.md: No space left',
         ].join('\n'),
         startedAt: '2026-11-27T14:00:00.000Z',
         finishedAt: '2026-11-27T14:00:09.000Z',
@@ -405,7 +405,7 @@ describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)
       '/api/v1/media/track-documents',
     );
     expect(read.json<TrackDocumentsOverview>().queue?.lastSync?.detail).toBe(
-      'sync-vault: rsync to nova-alexandria failed (exit 23) in ~/dev/vault',
+      'rsync: write failed on ~/dev/vault/x.md: No space left',
     );
   });
 
