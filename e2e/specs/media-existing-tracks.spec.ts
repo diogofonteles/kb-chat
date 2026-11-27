@@ -220,6 +220,67 @@ test('QA F-13: a failed publish says so and gives the focus back to the confirm 
   await expect(confirm).toBeFocused();
 });
 
+test('KBC-191: what kb gave up on counts as failed and says why in Portuguese; "Tentar de novo" queues it again', async ({
+  page,
+}) => {
+  const owner = await ownerApi();
+  const topic = await oldTracks(owner);
+  const title = await titleOf(owner, topic);
+  const queued = await owner.post('/api/v1/media/track-documents/publish', {
+    data: { topics: [topic] },
+    headers: CSRF,
+  });
+  expect(queued.ok()).toBe(true);
+  // The Mac's watch ended kb link as stuck (KBC-190): kb's words first, the reason last.
+  const stuck = [
+    'kb link: qmd candidates: on (collection x, about 1.2 s per document)',
+    'kb: stalled, no work for 1200 s; stopped',
+  ].join('\n');
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const failed = await owner.post('/api/e2e/kb-publish/fail', {
+      data: { topic, detail: stuck },
+      headers: CSRF,
+    });
+    expect(failed.status()).toBe(204);
+  }
+
+  await page.goto('/biblioteca');
+  const { section } = await openTranscribers(page);
+  await expect(section).toContainText(
+    `${title}: 0 na fila · 0 publicadas · 2 falharam`,
+  );
+  const mine = section
+    .getByRole('list', { name: 'Faixas que falharam ao publicar' })
+    .getByRole('listitem')
+    .filter({ hasText: `(${title})` });
+  await expect(mine).toHaveCount(2);
+  // Not "all in the collection" beside what failed (review F2).
+  await expect(section).not.toContainText('Todas as faixas publicadas');
+  for (const item of await mine.all()) {
+    await expect(item).toContainText(
+      'Falhou: o passo kb link ficou 20 min sem trabalhar e foi interrompido',
+    );
+    await expect(item).not.toContainText('stalled');
+  }
+  await mine.first().scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: `../work/KBC-191/evidence/failed-${desktop(page) ? 1440 : 390}.png`,
+  });
+  const width = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(width).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
+
+  await mine
+    .first()
+    .getByRole('button', { name: /^Tentar de novo/ })
+    .click();
+  await page.goto('/biblioteca');
+  const again = await openTranscribers(page);
+  await expect(again.section).toContainText(
+    `${title}: 1 na fila · 0 publicadas · 1 falhou`,
+  );
+  await owner.dispose();
+});
+
 test('AC-16: a member, even with every media permission, has no action and the API refuses (403)', async ({
   page,
 }) => {

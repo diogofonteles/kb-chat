@@ -315,6 +315,45 @@ describe('ExistingTracks (KBC-099 AC-16, scope of 2026-11-06)', () => {
     );
   });
 
+  it('KBC-191 F2, F13: with what kb gave up on, it never says all are in the collection, and says "1 falhou"', async () => {
+    await renderIt(
+      anOverview({
+        collections: [aCollection({ toPublish: 0, published: 1, failed: 1 })],
+      }),
+    );
+    expect(document.body.textContent).not.toContain(
+      'Todas as faixas publicadas já estão no acervo.',
+    );
+    expect(document.body.textContent).toContain(
+      'Hermetismo: 0 na fila · 1 publicada · 1 falhou',
+    );
+  });
+
+  it('KBC-191 F2: a failure only in the queue list (a removal) also keeps "all in" away', async () => {
+    await renderIt(
+      anOverview({
+        collections: [aCollection({ toPublish: 0, published: 2 })],
+        queue: {
+          waiting: 0,
+          lastPublishedAt: null,
+          lastSync: null,
+          failed: [
+            {
+              mediaId: '0b9c1f7e-1111-4a2b-8c3d-000000000009',
+              topic: 'hermetismo',
+              title: 'Uma faixa removida',
+              error: 'kb remove: permission denied',
+              since: new Date().toISOString(),
+            },
+          ],
+        },
+      }),
+    );
+    expect(document.body.textContent).not.toContain(
+      'Todas as faixas publicadas já estão no acervo.',
+    );
+  });
+
   it('Cancelar closes the choice and gives the focus back to the action', async () => {
     const { fixture } = await renderIt();
     await open(fixture);

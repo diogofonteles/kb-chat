@@ -99,7 +99,10 @@ class KbStepFailed(Exception):
     def __init__(self, step: str, output: str, spent: float = 0.0) -> None:
         self.step = step
         self.spent = spent
-        self.output = f"kb {step}: {output}"[-OUTPUT_CHARS:]
+        # The step's name first and the end of kb's words (why is last): a long output never
+        # cuts "kb <step>:" away (KBC-191 review F3).
+        head = f"kb {step}: "
+        self.output = head + output[-(OUTPUT_CHARS - len(head)) :]
         super().__init__(self.output)
 
 

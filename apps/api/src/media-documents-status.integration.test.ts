@@ -292,6 +292,123 @@ describe('The publishing queue for masters in Transcritores (KBC-100 FR-3, FR-4)
     expect(queue?.failed[0]?.error).toBe('kb link: exit 1');
   });
 
+  it('KBC-191 AC-1, AC-2: what was given up on counts as failed, never as queued; a retry moves it back', async () => {
+    const docs = await documentsWorld();
+    const { world } = docs;
+    const { tracks } = await publishedTracks(world);
+    const track = tracks[0];
+    if (!track) throw new Error('no track');
+    for (let attempt = 1; attempt <= 4; attempt += 1)
+      await failOnce(docs, 'kb link: exit 1');
+    const hermetismo = async () => {
+      const read = await world.media.owner(
+        'GET',
+        '/api/v1/media/track-documents',
+      );
+      expect(read.statusCode, read.body).toBe(200);
+      return read
+        .json<TrackDocumentsOverview>()
+        .collections.find((one) => one.topic === 'hermetismo');
+    };
+    expect(await hermetismo()).toMatchObject({
+      queued: 0,
+      failed: tracks.length,
+    });
+
+    const retried = await world.media.owner(
+      'POST',
+      `/api/v1/media/track-documents/failed/${track.id}/retry`,
+    );
+    expect(retried.statusCode, retried.body).toBe(202);
+    expect(await hermetismo()).toMatchObject({
+      queued: 1,
+      failed: tracks.length - 1,
+    });
+  });
+
+  it('KBC-191 review F1: a document kb left undecided, with attempts left, is still counted as queued', async () => {
+    const docs = await documentsWorld();
+    const { world, mac } = docs;
+    const { tracks } = await publishedTracks(world);
+    const job = await leaseKb(world.media, mac.token);
+    const result = await kbResult(
+      world.media,
+      { token: mac.token, job },
+      { ok: false },
+    );
+    expect(result.statusCode, result.body).toBe(204);
+    const read = await world.media.owner(
+      'GET',
+      '/api/v1/media/track-documents',
+    );
+    expect(read.statusCode, read.body).toBe(200);
+    const line = read
+      .json<TrackDocumentsOverview>()
+      .collections.find((one) => one.topic === 'hermetismo');
+    expect(line).toMatchObject({
+      queued: tracks.length,
+      published: 0,
+      failed: 0,
+    });
+  });
+
+  it('KBC-191 AC-3: a step the Mac ended as stuck says so, not what kb said before it', async () => {
+    const docs = await documentsWorld();
+    const { world } = docs;
+    const { tracks } = await publishedTracks(world);
+    const track = tracks[0];
+    if (!track) throw new Error('no track');
+    const output = [
+      'kb link: qmd candidates: on (collection hermetismo, about 1.2 s per document)',
+      'linking raw/media/a.md (1/3123)',
+      'kb: stalled, no work for 1200 s; stopped',
+    ].join('\n');
+    for (let attempt = 1; attempt <= 4; attempt += 1)
+      await failOnce(docs, output);
+    const reason =
+      'o passo kb link ficou 20 min sem trabalhar e foi interrompido';
+
+    const read = await world.media.owner(
+      'GET',
+      '/api/v1/media/track-documents',
+    );
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json<TrackDocumentsOverview>().queue?.failed[0]?.error).toBe(
+      reason,
+    );
+    expect(await publicationOf(world, track.id)).toMatchObject({
+      state: 'failed',
+      reason,
+    });
+  });
+
+  it("KBC-191 review F10: a failed sync reads as what stopped it, without the Mac's home folder", async () => {
+    const docs = await documentsWorld();
+    const { world, mac } = docs;
+    const sent = await asTranscriber(world.media, mac.token, {
+      method: 'POST',
+      url: '/api/v1/media-worker/vault-sync',
+      payload: {
+        ok: false,
+        // stdout (sync-vault's progress), then stderr (what stopped it), as the Mac sends it.
+        detail: [
+          'sync-vault: /Users/diogo/dev/vault (3 topics, 0 deletions) -> nova-alexandria:/srv/kb-chat/vault',
+          'rsync: write failed on /Users/diogo/dev/vault/x.md: No space left',
+        ].join('\n'),
+        startedAt: '2026-11-27T14:00:00.000Z',
+        finishedAt: '2026-11-27T14:00:09.000Z',
+      },
+    });
+    expect(sent.statusCode, sent.body).toBe(204);
+    const read = await world.media.owner(
+      'GET',
+      '/api/v1/media/track-documents',
+    );
+    expect(read.json<TrackDocumentsOverview>().queue?.lastSync?.detail).toBe(
+      'rsync: write failed on ~/dev/vault/x.md: No space left',
+    );
+  });
+
   it('a sync report comes only from a Mac marked "Publica no acervo"', async () => {
     const docs = await documentsWorld();
     const { world } = docs;
