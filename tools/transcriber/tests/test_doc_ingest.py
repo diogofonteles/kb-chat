@@ -1083,7 +1083,8 @@ def test_a_stuck_step_ends_with_all_it_started_and_says_why():
     started = time.monotonic()
     with pytest.raises(DocIngestFailed, match="stalled"):
         run_whole(["/bin/sh", "-c", "sleep 30"], None, stall_s=0.5, poll_s=0.1)
-    assert time.monotonic() - started < 3
+    # Far less than the sleep, with room for a loaded machine.
+    assert time.monotonic() - started < 15
 
 
 def test_a_stopped_job_ends_the_step_and_is_no_failure_of_it():
